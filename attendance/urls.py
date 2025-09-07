@@ -21,4 +21,6 @@ urlpatterns = [
     path('reports/monthly/export/', views.export_monthly_report, name='export_monthly_report'),
     path('reports/monthly/preview/', views.report_preview, name='report_preview'),
     path('non-school-days/import/', views.non_school_days_import, name='non_school_days_import'),
+    path('notifications/', views.notifications, name='notifications'),
+    path('notifications/mark-all-read/', views.notifications_mark_all_read, name='notifications_mark_all_read'),
 ]

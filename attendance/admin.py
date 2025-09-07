@@ -6,6 +6,7 @@ from .models import (
     Enrollment,
     AttendanceSessionRecord,
     NonSchoolDay,
+    Notification,
 )
 
 
@@ -56,3 +57,11 @@ class NonSchoolDayAdmin(admin.ModelAdmin):
     list_filter = ("school_year", "kind")
     search_fields = ("title", "notes")
     date_hierarchy = "date"
+
+
+@admin.register(Notification)
+class NotificationAdmin(admin.ModelAdmin):
+    list_display = ("user", "created", "message", "is_read")
+    list_filter = ("is_read", "user")
+    search_fields = ("message", "user__username", "user__first_name", "user__last_name")
+    date_hierarchy = "created"

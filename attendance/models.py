@@ -1,6 +1,7 @@
 from django.db import models
 from django.conf import settings
 from django.utils import timezone
+from django.conf import settings as dj_settings
 
 # Shared status choices for attendance
 STATUS_CHOICES = (
@@ -117,3 +118,20 @@ class NonSchoolDay(models.Model):
 
     def __str__(self):
         return f"{self.get_kind_display()} - {self.title} ({self.date})"
+
+
+class Notification(models.Model):
+    user = models.ForeignKey(dj_settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="notifications")
+    created = models.DateTimeField(auto_now_add=True)
+    message = models.CharField(max_length=255)
+    url = models.CharField(max_length=255, blank=True)
+    is_read = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["-created"]
+        indexes = [
+            models.Index(fields=["user", "is_read", "-created"], name="idx_notif_user_read_created"),
+        ]
+
+    def __str__(self):
+        return f"{self.user}: {self.message}"

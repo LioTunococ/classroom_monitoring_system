@@ -33,18 +33,15 @@
           <div class="student-name">{{ form.initial.student_name }}</div>
           <div class="d-flex gap-1 flex-wrap">
             {% if form.initial.guardian_phone %}
-              {% with sms_msg="Attendance update for "|add:form.initial.student_name|add:" on "|add:target_date|date:'Y-m-d'|add:". Please contact the adviser." %}
-                <a href="#" class="btn btn-sm btn-outline-secondary js-sms"
-                   data-phone="{{ form.initial.guardian_phone|phone_e164 }}"
-                   data-body="{{ sms_msg|urlencode }}"
-                   title="Compose SMS to parent">SMS</a>
-                <a class="btn btn-sm btn-outline-success" target="_blank"
-                   href="https://wa.me/{{ form.initial.guardian_phone|phone_wa }}?text={{ sms_msg|urlencode }}"
-                   title="Open WhatsApp chat">WhatsApp</a>
-                <a class="btn btn-sm btn-outline-info"
-                   href="viber://chat?number=%2B{{ form.initial.guardian_phone|phone_no_plus }}"
-                   title="Open Viber chat">Viber</a>
-              {% endwith %}
+              <a href="#" class="btn btn-sm btn-outline-secondary js-sms"
+                 data-phone="{{ form.initial.guardian_phone|phone_e164 }}"
+                 title="Compose SMS to parent">SMS</a>
+              <a href="#" class="btn btn-sm btn-outline-success js-wa"
+                 data-phone-wa="{{ form.initial.guardian_phone|phone_wa }}"
+                 title="Open WhatsApp chat">WhatsApp</a>
+              <a href="#" class="btn btn-sm btn-outline-info js-viber"
+                 data-phone-noplus="{{ form.initial.guardian_phone|phone_no_plus }}"
+                 title="Open Viber chat">Viber</a>
             {% endif %}
           </div>
           <div class="d-none">{{ form.student_name }}</div>
@@ -223,13 +220,44 @@
     function isiOS(){ return /iPhone|iPad|iPod/i.test(navigator.userAgent); }
     document.addEventListener('click', function(e){
       var t = e.target;
-      if (t && t.classList && t.classList.contains('js-sms')){
+      if (t && t.classList && (t.classList.contains('js-sms') || t.classList.contains('js-wa') || t.classList.contains('js-viber'))){
         e.preventDefault();
-        var phone = t.getAttribute('data-phone') || '';
-        var body = t.getAttribute('data-body') || '';
-        try { body = encodeURIComponent(decodeURIComponent(body)); } catch(_) {}
-        var href = isiOS() ? ('sms:' + phone + '&body=' + body) : ('sms:' + phone + '?body=' + body);
-        window.location.href = href;
+        var card = t.closest('.student-card');
+        var nameEl = card ? card.querySelector('.student-name') : null;
+        var name = nameEl ? nameEl.textContent.trim() : 'Student';
+        // Find selected statuses within this card
+        function sel(nameSuffix){
+          var input = card ? card.querySelector('input[name$="' + nameSuffix + '"]:checked') : null;
+          return input ? (input.value || 'P') : 'P';
+        }
+        function word(code){
+          switch(code){ case 'A': return 'Absent'; case 'L': return 'Late'; case 'E': return 'Excused'; default: return 'Present'; }
+        }
+        var am = sel('status_am');
+        var pm = sel('status_pm');
+        // Build Ilokano prefilled text.
+        // If any session is Absent, use the ABSENT-only message (per request).
+        var bodyText;
+        if (am === 'A' || pm === 'A') {
+          bodyText = 'Naimbag nga aldaw, parent. Maipakaammo nga ni ' + name + ' ket ABSENT ita nga aldaw. Thank you';
+        } else {
+          // If AM and PM same (e.g., both Present/Late/Excused), show one context; else show both.
+          var contextText = (am === pm) ? (word(am)) : ('AM: ' + word(am) + '; PM: ' + word(pm));
+          bodyText = 'Naimbag nga aldaw, parent. Maipakaammo nga ni ' + name + ' ket ' + contextText + ' ita nga aldaw. Thank you';
+        }
+        var enc = encodeURIComponent(bodyText);
+        if (t.classList.contains('js-sms')){
+          var phone = t.getAttribute('data-phone') || '';
+          var href = isiOS() ? ('sms:' + phone + '&body=' + enc) : ('sms:' + phone + '?body=' + enc);
+          window.location.href = href;
+        } else if (t.classList.contains('js-wa')){
+          var pwa = t.getAttribute('data-phone-wa') || '';
+          window.open('https://wa.me/' + pwa + '?text=' + enc, '_blank');
+        } else if (t.classList.contains('js-viber')){
+          var pnp = t.getAttribute('data-phone-noplus') || '';
+          // Viber URI cannot prefill text reliably; open chat only
+          window.location.href = 'viber://chat?number=%2B' + pnp;
+        }
       }
     }, { passive: false });
   })();

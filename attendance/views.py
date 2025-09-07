@@ -14,7 +14,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
 from .forms import AttendanceFormSet, SchoolYearForm, StudentForm
-from .models import AttendanceSessionRecord, Enrollment, SchoolYear, Student, Section, NonSchoolDay
+from .models import AttendanceSessionRecord, Enrollment, SchoolYear, Student, Section, NonSchoolDay, Notification
 
 # Status codes used across reports and dashboard
 STATUS_CODES = ('P', 'A', 'L', 'E')
@@ -484,14 +484,39 @@ def take_attendance(request, schoolyear_id: int):
                     status_am = form.cleaned_data['status_am']
                     status_pm = form.cleaned_data['status_pm']
                     remarks = form.cleaned_data.get('remarks', '')
-                    AttendanceSessionRecord.objects.update_or_create(
+                    # Keep previous to detect changes
+                    prev_am = existing.get((eid, 'AM'))
+                    prev_pm = existing.get((eid, 'PM'))
+                    am_obj, _ = AttendanceSessionRecord.objects.update_or_create(
                         enrollment_id=eid, date=target_date, session='AM',
                         defaults={'status': status_am, 'remarks': remarks}
                     )
-                    AttendanceSessionRecord.objects.update_or_create(
+                    pm_obj, _ = AttendanceSessionRecord.objects.update_or_create(
                         enrollment_id=eid, date=target_date, session='PM',
                         defaults={'status': status_pm, 'remarks': remarks}
                     )
+                    # Create in-app notifications for non-Present statuses when new or changed
+                    try:
+                        e = next((x for x in enrollments if x.id == eid), None)
+                        student = e.student if e else None
+                        if student:
+                            def status_word(code):
+                                return {'P':'Present','A':'Absent','L':'Late','E':'Excused'}.get(code, code)
+                            base_url = f"{reverse('attendance:take_attendance', args=[schoolyear_id])}?date={target_date}"
+                            if status_am in {'A','L','E'} and ((not prev_am) or prev_am.status != status_am):
+                                Notification.objects.create(
+                                    user=request.user,
+                                    message=f"{student.last_name}, {student.first_name} is {status_word(status_am)} (AM) on {target_date}",
+                                    url=base_url,
+                                )
+                            if status_pm in {'A','L','E'} and ((not prev_pm) or prev_pm.status != status_pm):
+                                Notification.objects.create(
+                                    user=request.user,
+                                    message=f"{student.last_name}, {student.first_name} is {status_word(status_pm)} (PM) on {target_date}",
+                                    url=base_url,
+                                )
+                    except Exception:
+                        pass
             # Invalidate cached monthly summaries for this SY/month
             try:
                 year = target_date.year
@@ -519,6 +544,24 @@ def take_attendance(request, schoolyear_id: int):
         'target_date': target_date,
         'formset': formset,
     })
+
+
+@login_required
+def notifications(request):
+    qs = Notification.objects.filter(user=request.user).order_by('-created')
+    items = list(qs[:100])
+    return render(request, 'attendance/notifications.html', {
+        'notifications': items,
+        'unread_count': qs.filter(is_read=False).count(),
+    })
+
+
+@login_required
+def notifications_mark_all_read(request):
+    if request.method == 'POST':
+        Notification.objects.filter(user=request.user, is_read=False).update(is_read=True)
+        messages.success(request, 'All notifications marked as read.')
+    return redirect('attendance:notifications')
 
 
 @login_required
