@@ -35,7 +35,7 @@ _hosts = os.environ.get('DJANGO_ALLOWED_HOSTS')
 if _hosts is not None:
     ALLOWED_HOSTS = [h.strip() for h in _hosts.split(',') if h.strip()]
 else:
-    ALLOWED_HOSTS = ["*"] if DEBUG else []
+    ALLOWED_HOSTS = ["leinster2528.pythonanywhere.com", "127.0.0.1", "localhost"]
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -108,7 +108,7 @@ TIME_ZONE = 'Asia/Manila'
 USE_I18N = True
 USE_TZ = True
 
-STATIC_URL = 'static/'
+STATIC_URL = "/static/"
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_DIRS = [BASE_DIR / 'static'] if (BASE_DIR / 'static').exists() else []
 
