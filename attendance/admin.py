@@ -18,9 +18,12 @@ class SchoolYearAdmin(admin.ModelAdmin):
 
 @admin.register(Student)
 class StudentAdmin(admin.ModelAdmin):
-    list_display = ("last_name", "first_name", "sex", "birthdate", "lrn", "is_active")
+    list_display = (
+        "last_name", "first_name", "sex", "birthdate", "lrn",
+        "guardian_name", "guardian_phone", "is_active",
+    )
     list_filter = ("sex", "is_active")
-    search_fields = ("last_name", "first_name", "lrn")
+    search_fields = ("last_name", "first_name", "lrn", "guardian_name", "guardian_phone")
 
 @admin.register(Section)
 class SectionAdmin(admin.ModelAdmin):
