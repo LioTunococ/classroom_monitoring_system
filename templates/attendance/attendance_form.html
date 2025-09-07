@@ -1,4 +1,5 @@
 {% extends 'attendance/base.html' %}
+{% load phone_filters %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
   <h1 class="h4 mb-0">Attendance: {{ schoolyear.name }}</h1>
@@ -28,8 +29,24 @@
     {# keep the disabled input in DOM but hide it; render name as heading for space #}
     <div class="card mb-2 shadow-sm student-card" data-name="{{ form.initial.student_name|default:''|lower }}">
       <div class="card-body">
-        <div class="mb-2">
+        <div class="mb-2 d-flex justify-content-between align-items-center gap-2 flex-wrap">
           <div class="student-name">{{ form.initial.student_name }}</div>
+          <div class="d-flex gap-1 flex-wrap">
+            {% if form.initial.guardian_phone %}
+              {% with sms_msg="Attendance update for "|add:form.initial.student_name|add:" on "|add:target_date|date:'Y-m-d'|add:". Please contact the adviser." %}
+                <a href="#" class="btn btn-sm btn-outline-secondary js-sms"
+                   data-phone="{{ form.initial.guardian_phone|phone_e164 }}"
+                   data-body="{{ sms_msg|urlencode }}"
+                   title="Compose SMS to parent">SMS</a>
+                <a class="btn btn-sm btn-outline-success" target="_blank"
+                   href="https://wa.me/{{ form.initial.guardian_phone|phone_wa }}?text={{ sms_msg|urlencode }}"
+                   title="Open WhatsApp chat">WhatsApp</a>
+                <a class="btn btn-sm btn-outline-info"
+                   href="viber://chat?number=%2B{{ form.initial.guardian_phone|phone_no_plus }}"
+                   title="Open Viber chat">Viber</a>
+              {% endwith %}
+            {% endif %}
+          </div>
           <div class="d-none">{{ form.student_name }}</div>
         </div>
         <div class="row g-2 align-items-center">
@@ -198,6 +215,23 @@
         // Rely on Django message toast; do not show a second duplicate toast here
       }
     });
+  })();
+</script>
+<script>
+  // Open SMS compose with platform-appropriate format
+  (function(){
+    function isiOS(){ return /iPhone|iPad|iPod/i.test(navigator.userAgent); }
+    document.addEventListener('click', function(e){
+      var t = e.target;
+      if (t && t.classList && t.classList.contains('js-sms')){
+        e.preventDefault();
+        var phone = t.getAttribute('data-phone') || '';
+        var body = t.getAttribute('data-body') || '';
+        try { body = encodeURIComponent(decodeURIComponent(body)); } catch(_) {}
+        var href = isiOS() ? ('sms:' + phone + '&body=' + body) : ('sms:' + phone + '?body=' + body);
+        window.location.href = href;
+      }
+    }, { passive: false });
   })();
 </script>
 <!-- Removed auto-fill rule for AM Absent -> PM Absent per request -->

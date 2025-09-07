@@ -50,6 +50,8 @@ class Student(models.Model):
     sex = models.CharField(max_length=1, choices=SEX_CHOICES)
     birthdate = models.DateField(blank=True, null=True)
     is_active = models.BooleanField(default=True)
+    guardian_name = models.CharField(max_length=150, blank=True)
+    guardian_phone = models.CharField(max_length=30, blank=True, help_text="Parent/guardian mobile (e.g., 09171234567 or +639171234567)")
 
     class Meta:
         ordering = ["last_name", "first_name"]

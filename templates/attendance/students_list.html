@@ -1,4 +1,5 @@
 {% extends 'attendance/base.html' %}
+{% load phone_filters %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
   <div class="d-flex align-items-center gap-3">
@@ -43,6 +44,21 @@
           <td>{{ s.birthdate|default:'—' }}</td>
           <td class="actions">
             <a class="btn btn-sm btn-outline-primary" href="{% url 'attendance:student_edit' s.id %}">Edit</a>
+            {% if s.guardian_phone %}
+              {% with sms_msg="Attendance update for "|add:s.last_name|add:", "|add:s.first_name|add:". Please contact the adviser." %}
+                <a href="#" class="btn btn-sm btn-outline-secondary js-sms"
+                   data-phone="{{ s.guardian_phone|phone_e164 }}"
+                   data-body="{{ sms_msg|urlencode }}"
+                   title="Compose SMS to parent">SMS</a>
+                <a class="btn btn-sm btn-outline-success"
+                   target="_blank"
+                   href="https://wa.me/{{ s.guardian_phone|phone_wa }}?text={{ sms_msg|urlencode }}"
+                   title="Open WhatsApp chat">WhatsApp</a>
+                <a class="btn btn-sm btn-outline-info"
+                   href="viber://chat?number=%2B{{ s.guardian_phone|phone_no_plus }}"
+                   title="Open Viber chat">Viber</a>
+              {% endwith %}
+            {% endif %}
             {% if s.is_active %}
               <a class="btn btn-sm btn-outline-warning" href="{% url 'attendance:student_archive' s.id %}">Archive</a>
             {% else %}
@@ -89,6 +105,24 @@
       if (this.checked) url.searchParams.set('archived','1'); else url.searchParams.delete('archived');
       window.location.href = url.toString();
     });
+  })();
+</script>
+<script>
+  // Open SMS compose with platform-appropriate format
+  (function(){
+    function isiOS(){ return /iPhone|iPad|iPod/i.test(navigator.userAgent); }
+    document.addEventListener('click', function(e){
+      var t = e.target;
+      if (t && t.classList && t.classList.contains('js-sms')){
+        e.preventDefault();
+        var phone = t.getAttribute('data-phone') || '';
+        var body = t.getAttribute('data-body') || '';
+        // Some browsers need encodeURIComponent even if template did urlencode
+        try { body = encodeURIComponent(decodeURIComponent(body)); } catch(_) {}
+        var href = isiOS() ? ('sms:' + phone + '&body=' + body) : ('sms:' + phone + '?body=' + body);
+        window.location.href = href;
+      }
+    }, { passive: false });
   })();
 </script>
 {% endblock %}

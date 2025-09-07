@@ -468,6 +468,8 @@ def take_attendance(request, schoolyear_id: int):
         initial.append({
             'enrollment_id': e.id,
             'student_name': f"{student.last_name}, {student.first_name}",
+            'guardian_phone': getattr(student, 'guardian_phone', ''),
+            'guardian_name': getattr(student, 'guardian_name', ''),
             'status_am': status_am,
             'status_pm': status_pm,
             'remarks': remarks,

@@ -28,7 +28,8 @@ class StudentForm(forms.ModelForm):
     class Meta:
         model = Student
         fields = [
-            'lrn', 'last_name', 'first_name', 'middle_name', 'sex', 'birthdate'
+            'lrn', 'last_name', 'first_name', 'middle_name', 'sex', 'birthdate',
+            'guardian_name', 'guardian_phone'
         ]
         widgets = {
             'birthdate': forms.DateInput(attrs={'type': 'date'}),
@@ -43,6 +44,10 @@ class StudentForm(forms.ModelForm):
         if 'lrn' in self.fields:
             attrs = self.fields['lrn'].widget.attrs
             attrs.update({'inputmode': 'numeric', 'autocomplete': 'off', 'pattern': '[0-9]*'})
+        if 'guardian_phone' in self.fields:
+            gp_attrs = self.fields['guardian_phone'].widget.attrs
+            # Allow digits, +, spaces, dashes; guide mobile entry
+            gp_attrs.update({'inputmode': 'tel', 'autocomplete': 'off', 'placeholder': '0917 123 4567 or +63 917 123 4567'})
         _apply_bootstrap_controls(self)
 
 
