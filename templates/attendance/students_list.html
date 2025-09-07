@@ -1,11 +1,20 @@
 {% extends 'attendance/base.html' %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center">
-  <h1 class="h4">Students</h1>
-  <a class="btn btn-success" href="{% url 'attendance:student_create' %}">Add Student</a>
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <div class="d-flex align-items-center gap-3">
+    <h1 class="h4 mb-0">Students</h1>
+    {% if active_sy %}<span class="text-muted small">Active SY: <strong>{{ active_sy.name }}</strong></span>{% endif %}
+  </div>
+  <div class="d-flex gap-2">
+    {% if active_sy %}
+      <a class="btn btn-primary" href="{% url 'attendance:enroll_students' active_sy.id %}">Enroll Students</a>
+      <a class="btn btn-outline-primary" href="{% url 'attendance:take_attendance' active_sy.id %}">Take Attendance</a>
+    {% endif %}
+    <a class="btn btn-success" href="{% url 'attendance:student_create' %}">Add Student</a>
+  </div>
 </div>
 
-<div class="row g-2 mt-3 align-items-end">
+<div class="row g-2 mt-3 align-items-end sticky-filter">
   <div class="col-sm-8">
     <label class="form-label">Search</label>
     <input id="student-filter" type="search" class="form-control" placeholder="Search by name or LRN..." autocomplete="off">
@@ -31,8 +40,8 @@
           <td>{{ s.lrn }}</td>
           <td>{{ s.last_name }}, {{ s.first_name }}</td>
           <td>{{ s.sex }}</td>
-          <td>{{ s.birthdate|default:"—" }}</td>
-          <td>
+          <td>{{ s.birthdate|default:'—' }}</td>
+          <td class="actions">
             <a class="btn btn-sm btn-outline-primary" href="{% url 'attendance:student_edit' s.id %}">Edit</a>
             {% if s.is_active %}
               <a class="btn btn-sm btn-outline-warning" href="{% url 'attendance:student_archive' s.id %}">Archive</a>
@@ -56,13 +65,18 @@
     const input = document.getElementById('student-filter');
     const rows = Array.from(document.querySelectorAll('#student-tbody tr'));
     if (!input) return;
-    input.addEventListener('input', function(){
-      const q = this.value.trim().toLowerCase();
+    let t = null;
+    function apply(){
+      const q = (input.value || '').trim().toLowerCase();
       rows.forEach(r => {
         const hay = (r.getAttribute('data-q') || '').toLowerCase();
         r.style.display = (!q || hay.includes(q)) ? '' : 'none';
       });
-    });
+    }
+    input.addEventListener('input', function(){
+      if (t) clearTimeout(t);
+      t = setTimeout(apply, 120);
+    }, { passive: true });
   })();
 </script>
 <script>

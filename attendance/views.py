@@ -267,9 +267,14 @@ def student_list(request):
     if not show_archived:
         qs = qs.filter(is_active=True)
     students = qs
+    try:
+        active_sy = SchoolYear.objects.filter(is_active=True).first()
+    except Exception:
+        active_sy = None
     return render(request, 'attendance/students_list.html', {
         'students': students,
         'show_archived': show_archived,
+        'active_sy': active_sy,
     })
 
 
@@ -412,10 +417,12 @@ def enroll_students(request, schoolyear_id: int):
         created = 0
         for sid in student_ids:
             student = get_object_or_404(Student, pk=sid)
-            Enrollment.objects.get_or_create(student=student, school_year=sy)
-            created += 1
-        messages.success(request, f'Enrolled {created} students to {sy.name}.')
-        return redirect('attendance:schoolyear_list')
+            _, was_created = Enrollment.objects.get_or_create(student=student, school_year=sy)
+            if was_created:
+                created += 1
+        messages.success(request, f'Enrolled {created} new student(s) to {sy.name}.')
+        # Go straight to taking attendance for convenience
+        return redirect('attendance:take_attendance', schoolyear_id=sy.id)
 
     enrolled_ids = set(Enrollment.objects.filter(school_year=sy).values_list('student_id', flat=True))
     students = Student.objects.filter(is_active=True)

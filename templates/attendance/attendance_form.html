@@ -2,7 +2,7 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
   <h1 class="h4 mb-0">Attendance: {{ schoolyear.name }}</h1>
-  <form id="date-form" method="get" class="d-flex align-items-center gap-2">
+  <form id="date-form" method="get" class="d-flex align-items-center gap-2 flex-wrap">
     <div class="btn-group" role="group" aria-label="Quick date nav">
       <button class="btn btn-outline-secondary" type="button" id="btn-prev">Prev</button>
       <button class="btn btn-outline-secondary" type="button" id="btn-today">Today</button>
@@ -25,17 +25,17 @@
 
   {% for form in formset %}
     {{ form.enrollment_id }}
+    {# keep the disabled input in DOM but hide it; render name as heading for space #}
     <div class="card mb-2 shadow-sm student-card" data-name="{{ form.initial.student_name|default:''|lower }}">
       <div class="card-body">
-        <div class="d-flex justify-content-between align-items-start">
-          <div class="me-3 flex-grow-1">
-            <label class="form-label mb-1">Learner</label>
-            {{ form.student_name }}
-          </div>
-          <div class="text-nowrap" style="min-width: 240px;">
-            <div class="mb-2">
-              <label class="form-label mb-1">AM</label>
-              <div class="btn-group" role="group" aria-label="Status AM">
+        <div class="mb-2">
+          <div class="student-name">{{ form.initial.student_name }}</div>
+          <div class="d-none">{{ form.student_name }}</div>
+        </div>
+        <div class="row g-2 align-items-center">
+          <div class="col-12 col-sm-6">
+            <div class="mb-1"><span class="text-muted small me-2">AM</span>
+              <div class="att-status" role="group" aria-label="Status AM">
                 {% for opt in form.status_am %}
                   {{ opt.tag }}
                   {% with val=opt.data.value %}
@@ -44,9 +44,10 @@
                 {% endfor %}
               </div>
             </div>
-            <div>
-              <label class="form-label mb-1">PM</label>
-              <div class="btn-group" role="group" aria-label="Status PM">
+          </div>
+          <div class="col-12 col-sm-6">
+            <div class="mb-1"><span class="text-muted small me-2">PM</span>
+              <div class="att-status" role="group" aria-label="Status PM">
                 {% for opt in form.status_pm %}
                   {{ opt.tag }}
                   {% with val=opt.data.value %}
@@ -68,10 +69,10 @@
   {% endfor %}
 </form>
 
-<div class="fixed-bottom border-top bg-body p-2">
-  <div class="container d-flex gap-2">
-    <button class="btn btn-primary flex-fill" form="attendance-form" type="submit">Save Attendance</button>
-    <a class="btn btn-outline-secondary" href="{% url 'attendance:schoolyear_list' %}">Back</a>
+<div class="action-bar border-top bg-body">
+  <div class="inner container d-flex flex-column flex-sm-row gap-2">
+    <button class="btn btn-primary w-100 flex-fill" form="attendance-form" type="submit">Save Attendance</button>
+    <a class="btn btn-outline-secondary w-100 w-sm-auto" href="{% url 'attendance:schoolyear_list' %}">Back</a>
   </div>
 </div>
 {% endblock %}
