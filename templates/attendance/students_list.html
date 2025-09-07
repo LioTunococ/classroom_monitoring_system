@@ -1,0 +1,80 @@
+{% extends 'attendance/base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center">
+  <h1 class="h4">Students</h1>
+  <a class="btn btn-success" href="{% url 'attendance:student_create' %}">Add Student</a>
+</div>
+
+<div class="row g-2 mt-3 align-items-end">
+  <div class="col-sm-8">
+    <label class="form-label">Search</label>
+    <input id="student-filter" type="search" class="form-control" placeholder="Search by name or LRN..." autocomplete="off">
+  </div>
+  <div class="col-sm-4">
+    <div class="form-check mt-4">
+      <input class="form-check-input" type="checkbox" id="toggle-archived" {% if show_archived %}checked{% endif %}>
+      <label class="form-check-label" for="toggle-archived">Show archived students</label>
+    </div>
+  </div>
+</div>
+
+<div class="table-responsive mt-3">
+  <table class="table table-striped align-middle">
+    <thead>
+      <tr>
+        <th>LRN</th><th>Name</th><th>Sex</th><th>Birthdate</th><th>Actions</th>
+      </tr>
+    </thead>
+    <tbody id="student-tbody">
+      {% for s in students %}
+        <tr data-q="{{ s.lrn }} {{ s.last_name }} {{ s.first_name }}">
+          <td>{{ s.lrn }}</td>
+          <td>{{ s.last_name }}, {{ s.first_name }}</td>
+          <td>{{ s.sex }}</td>
+          <td>{{ s.birthdate|default:"—" }}</td>
+          <td>
+            <a class="btn btn-sm btn-outline-primary" href="{% url 'attendance:student_edit' s.id %}">Edit</a>
+            {% if s.is_active %}
+              <a class="btn btn-sm btn-outline-warning" href="{% url 'attendance:student_archive' s.id %}">Archive</a>
+            {% else %}
+              <a class="btn btn-sm btn-outline-success" href="{% url 'attendance:student_restore' s.id %}">Restore</a>
+              <a class="btn btn-sm btn-outline-danger" href="{% url 'attendance:student_delete' s.id %}">Hard Delete</a>
+            {% endif %}
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="5" class="text-muted">No students yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  (function(){
+    const input = document.getElementById('student-filter');
+    const rows = Array.from(document.querySelectorAll('#student-tbody tr'));
+    if (!input) return;
+    input.addEventListener('input', function(){
+      const q = this.value.trim().toLowerCase();
+      rows.forEach(r => {
+        const hay = (r.getAttribute('data-q') || '').toLowerCase();
+        r.style.display = (!q || hay.includes(q)) ? '' : 'none';
+      });
+    });
+  })();
+</script>
+<script>
+  // Toggle archived filter by updating query param
+  (function(){
+    const chk = document.getElementById('toggle-archived');
+    if (!chk) return;
+    chk.addEventListener('change', function(){
+      const url = new URL(window.location.href);
+      if (this.checked) url.searchParams.set('archived','1'); else url.searchParams.delete('archived');
+      window.location.href = url.toString();
+    });
+  })();
+</script>
+{% endblock %}

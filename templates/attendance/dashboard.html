@@ -1,0 +1,140 @@
+{% extends 'attendance/base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <h1 class="h3 mb-0">Dashboard</h1>
+  {% if active_sy %}
+  <form id="dash-date-form" method="get" class="d-flex align-items-center gap-2">
+    <div class="btn-group" role="group" aria-label="Quick date nav">
+      <button class="btn btn-outline-secondary" type="button" id="btn-prev">Prev</button>
+      <button class="btn btn-outline-secondary" type="button" id="btn-today">Today</button>
+      <button class="btn btn-outline-secondary" type="button" id="btn-next">Next</button>
+    </div>
+    <input id="dash-date" type="date" class="form-control" name="date" value="{{ view_date|default:today|date:'Y-m-d' }}">
+    <a class="btn btn-primary" href="{% url 'attendance:take_attendance' active_sy.id %}?date={{ view_date|default:today|date:'Y-m-d' }}">Take Attendance</a>
+  </form>
+  <div class="text-muted small w-100 mt-1">Viewing: <strong>{{ view_date|default:today|date:'F d, Y' }}</strong> ({{ view_date|default:today|date:'l' }})</div>
+  {% endif %}
+  </div>
+
+{% if active_sy %}
+
+{% if summary.is_complete %}
+<div class="alert alert-success shadow-sm mt-3">Attendance complete for {{ view_date|default:today|date:'F d, Y' }}. All sessions recorded.</div>
+{% elif summary.remaining_sessions|default:0 > 0 %}
+<div class="alert alert-warning shadow-sm mt-3 d-flex justify-content-between align-items-center">
+  <div>
+    <strong>Incomplete attendance</strong> for {{ view_date|default:today|date:'F d, Y' }} — Remaining sessions: {{ summary.remaining_sessions|default:0 }} ({{ summary.recorded_sessions|default:0 }}/{{ summary.total_sessions|default:0 }} recorded)
+  </div>
+  <a class="btn btn-sm btn-outline-primary" href="{% url 'attendance:take_attendance' active_sy.id %}?date={{ view_date|default:today|date:'Y-m-d' }}">Complete now</a>
+</div>
+{% endif %}
+
+<div class="row g-3 mt-1">
+  {# Removed bulky Active SY and Enrolled cards per request #}
+  <div class="col-12">
+    <div class="d-flex flex-wrap gap-3 align-items-center">
+      <div class="text-muted small">School Year: <strong>{{ active_sy.name }}</strong></div>
+      {% if sections %}
+        <div class="text-muted small">Section: <strong>
+          {% for s in sections %}{{ s.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+        </strong></div>
+      {% else %}
+        <div class="text-muted small">Section: <strong>None assigned</strong></div>
+      {% endif %}
+      <div class="text-muted small">Date: <strong>{{ view_date|default:today|date:'F d, Y' }}</strong></div>
+    </div>
+  </div>
+  {# Removed compact AM/PM counts card; detailed lists below #}
+  <div class="col-12 col-md-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-body">
+        <div class="text-muted small">AM Lists</div>
+        <div class="mb-1"><span class="badge text-bg-danger">Absent</span>
+          {% if summary.am_lists.A %}
+            {% for n in summary.am_lists.A %}<span class="badge text-bg-light text-dark me-1">{{ n }}</span>{% endfor %}
+          {% else %}<span class="text-muted">None</span>{% endif %}
+        </div>
+        <div class="mb-1"><span class="badge text-bg-warning text-dark">Late</span>
+          {% if summary.am_lists.L %}
+            {% for n in summary.am_lists.L %}<span class="badge text-bg-light text-dark me-1">{{ n }}</span>{% endfor %}
+          {% else %}<span class="text-muted">None</span>{% endif %}
+        </div>
+        <div><span class="badge text-bg-info text-dark">Excused</span>
+          {% if summary.am_lists.E %}
+            {% for n in summary.am_lists.E %}<span class="badge text-bg-light text-dark me-1">{{ n }}</span>{% endfor %}
+          {% else %}<span class="text-muted">None</span>{% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col-12 col-md-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-body">
+        <div class="text-muted small">PM Lists</div>
+        <div class="mb-1"><span class="badge text-bg-danger">Absent</span>
+          {% if summary.pm_lists.A %}
+            {% for n in summary.pm_lists.A %}<span class="badge text-bg-light text-dark me-1">{{ n }}</span>{% endfor %}
+          {% else %}<span class="text-muted">None</span>{% endif %}
+        </div>
+        <div class="mb-1"><span class="badge text-bg-warning text-dark">Late</span>
+          {% if summary.pm_lists.L %}
+            {% for n in summary.pm_lists.L %}<span class="badge text-bg-light text-dark me-1">{{ n }}</span>{% endfor %}
+          {% else %}<span class="text-muted">None</span>{% endif %}
+        </div>
+        <div><span class="badge text-bg-info text-dark">Excused</span>
+          {% if summary.pm_lists.E %}
+            {% for n in summary.pm_lists.E %}<span class="badge text-bg-light text-dark me-1">{{ n }}</span>{% endfor %}
+          {% else %}<span class="text-muted">None</span>{% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+  
+</div>
+
+{# Removed summary badge strip per request #}
+
+
+
+<h2 class="h5 mt-4">Upcoming Birthdays (next 2 weeks)</h2>
+<div class="table-responsive">
+  <table class="table align-middle">
+    <thead><tr><th>Name</th><th>Birthdate</th><th>Upcoming Date</th></tr></thead>
+    <tbody>
+    {% for student, upcoming in upcoming_birthdays %}
+      <tr>
+        <td>{{ student.last_name }}, {{ student.first_name }}</td>
+        <td>{{ student.birthdate }}</td>
+        <td>{{ upcoming }}</td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="3" class="text-muted">No upcoming birthdays.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<div class="alert alert-info">No active school year. Create one in School Years.</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  // Dashboard date nav: auto-submit and quick buttons
+  (function(){
+    const form = document.getElementById('dash-date-form');
+    const input = document.getElementById('dash-date');
+    const btnPrev = document.getElementById('btn-prev');
+    const btnNext = document.getElementById('btn-next');
+    const btnToday = document.getElementById('btn-today');
+    if (!form || !input) return;
+    function iso(d){ return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10); }
+    function getDate(){ const v=input.value; if(!v) return null; const p=v.split('-').map(Number); return new Date(p[0],p[1]-1,p[2]); }
+    function submit(d){ input.value = iso(d); try { form.requestSubmit ? form.requestSubmit() : form.submit(); } catch(e){ form.submit(); } }
+    input.addEventListener('change', ()=> submit(getDate()||new Date()));
+    if (btnPrev) btnPrev.addEventListener('click', ()=>{ const d=getDate()||new Date(); d.setDate(d.getDate()-1); submit(d); });
+    if (btnNext) btnNext.addEventListener('click', ()=>{ const d=getDate()||new Date(); d.setDate(d.getDate()+1); submit(d); });
+    if (btnToday) btnToday.addEventListener('click', ()=> submit(new Date()));
+  })();
+</script>
+{% endblock %}

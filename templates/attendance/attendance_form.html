@@ -1,0 +1,203 @@
+{% extends 'attendance/base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+  <h1 class="h4 mb-0">Attendance: {{ schoolyear.name }}</h1>
+  <form id="date-form" method="get" class="d-flex align-items-center gap-2">
+    <div class="btn-group" role="group" aria-label="Quick date nav">
+      <button class="btn btn-outline-secondary" type="button" id="btn-prev">Prev</button>
+      <button class="btn btn-outline-secondary" type="button" id="btn-today">Today</button>
+      <button class="btn btn-outline-secondary" type="button" id="btn-next">Next</button>
+    </div>
+    <input id="date-input" type="date" class="form-control" name="date" value="{{ target_date|date:'Y-m-d' }}">
+    <button class="btn btn-outline-secondary" type="submit">Go</button>
+  </form>
+  <div class="text-muted small w-100 mt-1">Viewing: <strong>{{ target_date|date:'F d, Y' }}</strong> ({{ target_date|date:'l' }})</div>
+  </div>
+
+<div class="mt-3">
+  <input id="filter-input" type="search" class="form-control" placeholder="Search learner by name..." autocomplete="off">
+  <div class="form-text">Type to filter the list below.</div>
+  </div>
+
+<form id="attendance-form" method="post" class="mt-3">{% csrf_token %}
+  {{ formset.management_form }}
+  <input type="hidden" name="date" value="{{ target_date|date:'Y-m-d' }}">
+
+  {% for form in formset %}
+    {{ form.enrollment_id }}
+    <div class="card mb-2 shadow-sm student-card" data-name="{{ form.initial.student_name|default:''|lower }}">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-start">
+          <div class="me-3 flex-grow-1">
+            <label class="form-label mb-1">Learner</label>
+            {{ form.student_name }}
+          </div>
+          <div class="text-nowrap" style="min-width: 240px;">
+            <div class="mb-2">
+              <label class="form-label mb-1">AM</label>
+              <div class="btn-group" role="group" aria-label="Status AM">
+                {% for opt in form.status_am %}
+                  {{ opt.tag }}
+                  {% with val=opt.data.value %}
+                  <label class="btn {% if val == 'P' %}btn-outline-success{% elif val == 'A' %}btn-outline-danger{% elif val == 'L' %}btn-outline-warning{% elif val == 'E' %}btn-outline-info{% else %}btn-outline-primary{% endif %}" for="{{ opt.id_for_label }}">{{ opt.choice_label }}</label>
+                  {% endwith %}
+                {% endfor %}
+              </div>
+            </div>
+            <div>
+              <label class="form-label mb-1">PM</label>
+              <div class="btn-group" role="group" aria-label="Status PM">
+                {% for opt in form.status_pm %}
+                  {{ opt.tag }}
+                  {% with val=opt.data.value %}
+                  <label class="btn {% if val == 'P' %}btn-outline-success{% elif val == 'A' %}btn-outline-danger{% elif val == 'L' %}btn-outline-warning{% elif val == 'E' %}btn-outline-info{% else %}btn-outline-primary{% endif %}" for="{{ opt.id_for_label }}">{{ opt.choice_label }}</label>
+                  {% endwith %}
+                {% endfor %}
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="mt-2">
+          <label class="form-label mb-1">Remarks</label>
+          {{ form.remarks }}
+        </div>
+      </div>
+    </div>
+  {% empty %}
+    <div class="alert alert-info">No enrolled students.</div>
+  {% endfor %}
+</form>
+
+<div class="fixed-bottom border-top bg-body p-2">
+  <div class="container d-flex gap-2">
+    <button class="btn btn-primary flex-fill" form="attendance-form" type="submit">Save Attendance</button>
+    <a class="btn btn-outline-secondary" href="{% url 'attendance:schoolyear_list' %}">Back</a>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  // Simple client-side filter by learner name
+  (function(){
+    const input = document.getElementById('filter-input');
+    if (!input) return;
+    const cards = Array.from(document.querySelectorAll('.student-card'));
+    input.addEventListener('input', function(){
+      const q = this.value.trim().toLowerCase();
+      cards.forEach(c => {
+        const name = (c.getAttribute('data-name') || '');
+        c.style.display = (!q || name.includes(q)) ? '' : 'none';
+      });
+    });
+  })();
+</script>
+<script>
+  // Date UX + Unsaved guard + shortcuts
+  (function(){
+    const navForm = document.getElementById('date-form');
+    const dateInput = document.getElementById('date-input');
+    const btnPrev = document.getElementById('btn-prev');
+    const btnNext = document.getElementById('btn-next');
+    const btnToday = document.getElementById('btn-today');
+    const attForm = document.getElementById('attendance-form');
+    if (!navForm || !dateInput) return;
+
+    // Track dirty state
+    let dirty = false;
+    window.__attendSubmitting = false;
+    if (attForm){
+      attForm.addEventListener('change', (e)=>{
+        const t = e.target;
+        if (!t) return;
+        if (t.matches('input[type="radio"], textarea, input[type="text"]')) dirty = true;
+      }, { passive: true });
+    }
+    window.addEventListener('beforeunload', function(e){
+      if (window.__attendSubmitting) return;
+      if (!dirty) return;
+      e.preventDefault();
+      e.returnValue = '';
+    });
+
+    function iso(d){ return new Date(d.getTime() - d.getTimezoneOffset()*60000).toISOString().slice(0,10); }
+    function fmt(d){ try { return d.toLocaleDateString(undefined, { year:'numeric', month:'long', day:'2-digit' }); } catch(e) { return iso(d); } }
+    function getDate(){
+      const v = dateInput.value || '';
+      if (!v) return null;
+      const parts = v.split('-').map(Number);
+      return new Date(parts[0], parts[1]-1, parts[2]);
+    }
+    function confirmIfDirty(){
+      return !dirty || confirm('You have unsaved changes. Continue and discard them?');
+    }
+    function setAndSubmit(d){
+      if (!confirmIfDirty()) return;
+      dateInput.value = iso(d);
+      try { navForm.requestSubmit ? navForm.requestSubmit() : navForm.submit(); } catch(e){ navForm.submit(); }
+    }
+
+    dateInput.addEventListener('change', function(){ setAndSubmit(getDate() || new Date()); });
+    if (btnPrev) btnPrev.addEventListener('click', function(){ const d=getDate()||new Date(); d.setDate(d.getDate()-1); setAndSubmit(d); });
+    if (btnNext) btnNext.addEventListener('click', function(){ const d=getDate()||new Date(); d.setDate(d.getDate()+1); setAndSubmit(d); });
+    if (btnToday) btnToday.addEventListener('click', function(){ setAndSubmit(new Date()); });
+
+    // Keyboard shortcuts: Left/Right arrows to move day
+    window.addEventListener('keydown', function(e){
+      if (e.target && ['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) return;
+      if (e.key === 'ArrowLeft'){ const d=getDate()||new Date(); d.setDate(d.getDate()-1); setAndSubmit(d); }
+      if (e.key === 'ArrowRight'){ const d=getDate()||new Date(); d.setDate(d.getDate()+1); setAndSubmit(d); }
+      if (e.key.toLowerCase() === 't'){ setAndSubmit(new Date()); }
+    });
+
+    try {
+      // Move toast container to top-right so it does not block the Save bar
+      const tc = document.getElementById('toastContainer');
+      if (tc){ tc.style.top='1rem'; tc.style.bottom='auto'; tc.style.left='auto'; tc.style.right='1rem'; tc.style.transform='none'; }
+      const v = dateInput.value;
+      if (v && window.showToast){
+        const p = v.split('-').map(Number); const d = new Date(p[0], p[1]-1, p[2]);
+        window.showToast('Showing attendance for ' + fmt(d), 'info');
+      }
+    } catch(e) {}
+  })();
+</script>
+<script>
+  // Preserve scroll on save and show a toast when returning
+  (function(){
+    const form = document.getElementById('attendance-form');
+    let submitting = false;
+    if (form) {
+      form.addEventListener('submit', function(){
+        try {
+          sessionStorage.setItem('attend_scroll', String(window.scrollY || window.pageYOffset || 0));
+          sessionStorage.setItem('attend_saved', '1');
+        } catch(e) {}
+        submitting = true;
+        window.__attendSubmitting = true;
+      });
+    }
+    // Prevent false warning when we are actually submitting
+    window.addEventListener('beforeunload', function(e){
+      if (submitting) return;
+    });
+    window.addEventListener('DOMContentLoaded', function(){
+      const params = new URLSearchParams(window.location.search);
+      const savedParam = params.get('saved') === '1';
+      let savedFlag = false;
+      try { savedFlag = sessionStorage.getItem('attend_saved') === '1'; } catch(e) {}
+      if (savedParam || savedFlag) {
+        // Scroll restore
+        try {
+          const y = parseInt(sessionStorage.getItem('attend_scroll') || '0', 10);
+          if (!isNaN(y) && y > 0) { setTimeout(()=> window.scrollTo({top: y, behavior: 'auto'}), 0); }
+          sessionStorage.removeItem('attend_scroll');
+          sessionStorage.removeItem('attend_saved');
+        } catch(e) {}
+        // Rely on Django message toast; do not show a second duplicate toast here
+      }
+    });
+  })();
+</script>
+<!-- Removed auto-fill rule for AM Absent -> PM Absent per request -->
+{% endblock %}

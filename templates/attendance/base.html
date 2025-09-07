@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Classroom Monitoring System</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    body { padding-top: 4rem; padding-bottom: 4.5rem; }
+    @media (max-width: 576px) {
+      .btn, .form-control, .form-select { min-height: 44px; }
+    }
+  </style>
+  {% load static %}
+  <link rel="manifest" href="{% static 'pwa/manifest.webmanifest' %}">
+  <meta name="theme-color" content="#0d6efd">
+  <link rel="apple-touch-icon" href="/pwa/icons/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="CMS">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+</head>
+<body>
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark fixed-top">
+  <div class="container-fluid">
+    <a class="navbar-brand" href="{% url 'attendance:dashboard' %}">CMS</a>
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#mainNav" aria-controls="mainNav" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+    <div class="collapse navbar-collapse" id="mainNav">
+      <ul class="navbar-nav me-auto">
+        {% if request.user.is_staff or request.user.is_superuser %}
+          <li class="nav-item"><a class="nav-link" href="{% url 'attendance:student_list' %}">Students</a></li>
+          <li class="nav-item"><a class="nav-link" href="{% url 'attendance:schoolyear_list' %}">School Years</a></li>
+        {% endif %}
+        <li class="nav-item"><a class="nav-link" href="{% url 'attendance:report_form' %}">Reports</a></li>
+        {% if active_sy %}
+          <li class="nav-item"><a class="nav-link" href="{% url 'attendance:bulk_assign_section' active_sy.id %}">Assign Section</a></li>
+        {% endif %}
+      </ul>
+      <ul class="navbar-nav">
+        {% if request.user.is_authenticated %}
+          <li class="nav-item"><span class="navbar-text me-2">{{ request.user.get_username }}</span></li>
+          <li class="nav-item">
+            <form method="post" action="{% url 'logout' %}">
+              {% csrf_token %}
+              <button type="submit" class="btn btn-link nav-link p-0 m-0">Logout</button>
+            </form>
+          </li>
+        {% else %}
+          <li class="nav-item"><a class="nav-link" href="{% url 'login' %}">Login</a></li>
+        {% endif %}
+        <li class="nav-item d-flex align-items-center">
+          <button id="btn-install-app" type="button" class="btn btn-sm btn-outline-light ms-2">Install</button>
+        </li>
+      </ul>
+    </div>
+  </div>
+  </nav>
+
+<main class="container">
+  {% for message in messages %}
+    <div class="alert alert-{{ message.tags }} d-none js-msg">{{ message }}</div>
+  {% endfor %}
+  {% block content %}{% endblock %}
+  <hr/>
+  <p class="text-muted small">Classroom Monitoring System (Created by Leinster C. Denna pogi)</p>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+  // Register SW and show update toast when a new version is ready
+  (function(){
+    if (!('serviceWorker' in navigator)) return;
+    let refreshOnUpdate = false;
+    window.addEventListener('load', function() {
+      navigator.serviceWorker.register('/service-worker.js').then(reg => {
+        function showUpdateToast(){
+          const toastEl = document.getElementById('updateToast');
+          if (!toastEl) return;
+          const toast = new bootstrap.Toast(toastEl);
+          toast.show();
+        }
+        if (reg.waiting) { showUpdateToast(); }
+        reg.addEventListener('updatefound', () => {
+          const newWorker = reg.installing;
+          if (!newWorker) return;
+          newWorker.addEventListener('statechange', () => {
+            if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
+              showUpdateToast();
+            }
+          });
+        });
+
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          if (refreshOnUpdate) window.location.reload();
+        });
+
+        const btn = document.getElementById('btn-update-reload');
+        if (btn) {
+          btn.addEventListener('click', () => {
+            if (reg.waiting) {
+              refreshOnUpdate = true;
+              reg.waiting.postMessage({type:'SKIP_WAITING'});
+            } else {
+              window.location.reload();
+            }
+          });
+        }
+      }).catch(function(e){
+        console.debug('SW registration failed:', e);
+      });
+    });
+  })();
+</script>
+
+<!-- Update available toast -->
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index: 1080">
+  <div id="updateToast" class="toast align-items-center text-bg-dark border-0" role="alert" aria-live="assertive" aria-atomic="true">
+    <div class="d-flex">
+      <div class="toast-body">
+        An update is ready. Reload to get the latest.
+      </div>
+      <div class="d-flex align-items-center gap-2 pe-2">
+        <button id="btn-update-reload" type="button" class="btn btn-sm btn-primary">Reload</button>
+        <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+      </div>
+    </div>
+  </div>
+  </div>
+
+<!-- Generic toast container and helper -->
+<div id="toastContainer" class="position-fixed bottom-0 start-50 translate-middle-x p-3" style="z-index:1080"></div>
+<script>
+  window.showToast = function(message, type){
+    try {
+      const container = document.getElementById('toastContainer');
+      const el = document.createElement('div');
+      const bg = type === 'error' ? 'text-bg-danger' : (type === 'info' ? 'text-bg-primary' : 'text-bg-success');
+      el.className = `toast align-items-center ${bg} border-0`;
+      el.setAttribute('role','alert');
+      el.setAttribute('aria-live','assertive');
+      el.setAttribute('aria-atomic','true');
+      el.innerHTML = `<div class=\"d-flex\"><div class=\"toast-body\">${message}</div><button type=\"button\" class=\"btn-close btn-close-white me-2 m-auto\" data-bs-dismiss=\"toast\" aria-label=\"Close\"></button></div>`;
+      container.appendChild(el);
+      const t = new bootstrap.Toast(el, { delay: 3000 });
+      t.show();
+      el.addEventListener('hidden.bs.toast', ()=> el.remove());
+    } catch(e) { console.debug('toast error', e); }
+  }
+</script>
+<script>
+  // PWA install prompt handling and button fallback
+  (function(){
+    let deferredPrompt = null;
+    const btn = document.getElementById('btn-install-app');
+    const showBtn = () => { if (btn) btn.classList.remove('d-none'); };
+    const hideBtn = () => { if (btn) btn.classList.add('d-none'); };
+    const banner = document.getElementById('install-banner');
+    const showBanner = () => { if (banner) banner.classList.remove('d-none'); };
+    const hideBanner = () => { if (banner) banner.classList.add('d-none'); };
+
+    // Hide if already running standalone
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone;
+    if (isStandalone) { hideBtn(); hideBanner(); } else { showBtn(); showBanner(); }
+
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      showBtn();
+      showBanner();
+    });
+
+    window.addEventListener('appinstalled', () => {
+      deferredPrompt = null;
+      hideBtn();
+      hideBanner();
+      if (window.showToast) window.showToast('App installed', 'success');
+    });
+
+    async function triggerInstall(){
+        try {
+          if (deferredPrompt) {
+            deferredPrompt.prompt();
+            const choice = await deferredPrompt.userChoice;
+            deferredPrompt = null;
+            if (choice && choice.outcome === 'accepted') hideBtn();
+          } else {
+            if (window.showToast) {
+              const ua = navigator.userAgent || '';
+              const hint = ua.includes('Edg')
+                ? 'Edge: menu > Apps > Install this site.'
+                : 'Chrome: menu (three dots) > Install app.';
+              window.showToast(hint, 'info');
+            }
+          }
+        } catch (err) { console.debug('install prompt error', err); }
+    }
+
+    if (btn) btn.addEventListener('click', triggerInstall);
+    const bannerBtn = document.getElementById('btn-install-banner');
+    if (bannerBtn) bannerBtn.addEventListener('click', triggerInstall);
+  })();
+</script>
+{% block extra_js %}{% endblock %}
+</body>
+<script>
+  // Convert Django alerts to toasts for consistent feedback
+  (function(){
+    const els = document.querySelectorAll('.js-msg');
+    if (!els || !window.showToast) return;
+    els.forEach(el => {
+      let type = 'info';
+      if (el.classList.contains('alert-success')) type = 'success';
+      else if (el.classList.contains('alert-danger')) type = 'error';
+      else if (el.classList.contains('alert-warning')) type = 'info';
+      const msg = el.textContent.trim();
+      if (msg) window.showToast(msg, type);
+      el.remove();
+    });
+  })();
+</script>
+</html>

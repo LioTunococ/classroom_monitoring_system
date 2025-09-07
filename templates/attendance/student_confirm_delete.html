@@ -1,0 +1,15 @@
+{% extends 'attendance/base.html' %}
+{% block content %}
+<h1 class="h5">Delete Student</h1>
+<div class="alert alert-warning">
+  <p class="mb-1">You are about to delete <strong>{{ student }}</strong>.</p>
+  <p class="mb-0 small">This will also remove {{ enroll_count }} enrollment(s) and {{ attn_count }} attendance record(s) linked to this student.</p>
+  <p class="mb-0 small">This action cannot be undone.</p>
+</div>
+
+<form method="post">{% csrf_token %}
+  <button type="submit" class="btn btn-danger">Delete</button>
+  <a href="{% url 'attendance:student_list' %}" class="btn btn-outline-secondary">Cancel</a>
+</form>
+{% endblock %}
+

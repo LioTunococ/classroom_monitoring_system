@@ -1,0 +1,203 @@
+{% extends 'attendance/base.html' %}
+{% block content %}
+<h1 class="h4">Monthly Report (SF2)</h1>
+
+<form method="get" action="{% url 'attendance:report_form' %}" class="row g-3 mt-2">
+  <div class="col-md-4">
+    <label class="form-label">School Year</label>
+    <select class="form-select" name="schoolyear_id" required>
+      {% for sy in schoolyears %}
+      <option value="{{ sy.id }}" {% if selected_sy_id == sy.id %}selected{% endif %}>{{ sy.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-md-3">
+    <label class="form-label">Year</label>
+    <select class="form-select" name="year" required>
+      {% for y in year_options %}
+        <option value="{{ y }}" {% if selected_year == y %}selected{% endif %}>{{ y }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-md-3">
+    <label class="form-label">Month</label>
+    <select class="form-select" name="month" required>
+      {% for m, name in month_options %}
+        <option value="{{ m }}" {% if selected_month == m %}selected{% endif %}>{{ name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-md-2 d-flex align-items-end gap-2">
+    <button class="btn btn-primary w-100" type="submit">Update</button>
+  </div>
+  </form>
+
+<div class="d-flex justify-content-between align-items-center mt-4">
+  <h2 class="h6 mb-0">Preview -
+    {% if selected_sy %} {{ selected_sy.name }} - {{ selected_year }}-{{ selected_month|stringformat:'02d' }} {% else %} No School Year {% endif %}
+  </h2>
+  {% if selected_sy %}
+  <div>
+    <a class="btn btn-outline-secondary" href="{% url 'attendance:report_form' %}">Refresh</a>
+    <a class="btn btn-success" href="{% url 'attendance:export_monthly_report' %}?schoolyear_id={{ selected_sy.id }}&year={{ selected_year }}&month={{ selected_month }}">Download Excel</a>
+  </div>
+  {% endif %}
+  </div>
+
+<div class="table-responsive mt-3">
+  <table class="table table-sm table-bordered align-middle text-center">
+    <thead class="table-light">
+      <tr>
+        <th>LRN</th>
+        <th class="text-start">Learner's Name</th>
+        <th>Sex</th>
+        <th>Birthdate</th>
+        {% for d in days %}
+          <th class="{% if nsd_dates and d in nsd_dates %}table-secondary{% endif %}" title="{{ d|date:'l' }}">
+            {{ d|date:'j' }}
+            <div class="small text-muted">{{ d|date:'D' }}</div>
+          </th>
+        {% endfor %}
+        <th>P</th>
+        <th>A</th>
+        <th>L</th>
+        <th>E</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% if rows_m %}
+      <tr><th colspan="{{ total_cols }}" class="table-light text-start">Male</th></tr>
+      {% for r in rows_m %}
+        <tr>
+          <td>{{ r.lrn }}</td>
+          <td class="text-start">{{ r.name }}</td>
+          <td>{{ r.sex }}</td>
+          <td>{{ r.birthdate }}</td>
+          {% for p in r.day_pairs %}
+            <td class="{% if nsd_dates and p.day in nsd_dates %}table-secondary{% endif %}">{% if p.mark %}<strong>{{ p.mark }}</strong>{% endif %}</td>
+          {% endfor %}
+          <td>{{ r.counts.P }}</td>
+          <td>{{ r.counts.A }}</td>
+          <td>{{ r.counts.L }}</td>
+          <td>{{ r.counts.E }}</td>
+        </tr>
+      {% endfor %}
+      <tr class="fw-semibold">
+        <td></td><td class="text-start">Male present per day</td><td></td><td></td>
+        {% for v in mpd %}<td>{{ v }}</td>{% endfor %}
+        <td></td><td></td><td></td><td></td>
+      </tr>
+      {% endif %}
+
+      {% if rows_f %}
+      <tr><th colspan="{{ total_cols }}" class="table-light text-start">Female</th></tr>
+      {% for r in rows_f %}
+        <tr>
+          <td>{{ r.lrn }}</td>
+          <td class="text-start">{{ r.name }}</td>
+          <td>{{ r.sex }}</td>
+          <td>{{ r.birthdate }}</td>
+          {% for p in r.day_pairs %}
+            <td class="{% if nsd_dates and p.day in nsd_dates %}table-secondary{% endif %}">{% if p.mark %}<strong>{{ p.mark }}</strong>{% endif %}</td>
+          {% endfor %}
+          <td>{{ r.counts.P }}</td>
+          <td>{{ r.counts.A }}</td>
+          <td>{{ r.counts.L }}</td>
+          <td>{{ r.counts.E }}</td>
+        </tr>
+      {% endfor %}
+      <tr class="fw-semibold">
+        <td></td><td class="text-start">Female present per day</td><td></td><td></td>
+        {% for v in fpd %}<td>{{ v }}</td>{% endfor %}
+        <td></td><td></td><td></td><td></td>
+      </tr>
+      <tr class="fw-bold">
+        <td></td><td class="text-start">Combined present per day</td><td></td><td></td>
+        {% for v in cpd %}<td>{{ v }}</td>{% endfor %}
+        <td></td><td></td><td></td><td></td>
+      </tr>
+      {% endif %}
+
+      {% if not rows_m and not rows_f %}
+        <tr>
+          <td colspan="{{ total_cols }}" class="text-muted">No data to show.</td>
+        </tr>
+      {% endif %}
+    </tbody>
+  </table>
+</div>
+
+{% if summary %}
+<h3 class="h6 mt-4">Monthly Summary (SF2)</h3>
+<div class="table-responsive">
+  <table class="table table-sm table-bordered align-middle text-center w-auto">
+    <thead class="table-light">
+      <tr>
+        <th>Metric</th>
+        <th>M</th>
+        <th>F</th>
+        <th>Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="text-start">No. of School Days in month</td>
+        <td colspan="3">{{ summary.school_days }}</td>
+      </tr>
+      <tr>
+        <td class="text-start">Enrolment as of 1st Friday</td>
+        <td>{{ summary.by.M.enrol_first_friday }}</td>
+        <td>{{ summary.by.F.enrol_first_friday }}</td>
+        <td>{{ summary.by.T.enrol_first_friday }}</td>
+      </tr>
+      <tr>
+        <td class="text-start">Late enrolment during the month (beyond cut-off)</td>
+        <td>{{ summary.by.M.late_enrol }}</td>
+        <td>{{ summary.by.F.late_enrol }}</td>
+        <td>{{ summary.by.T.late_enrol }}</td>
+      </tr>
+      <tr>
+        <td class="text-start">Registered learners as of end of month</td>
+        <td>{{ summary.by.M.registered_eom }}</td>
+        <td>{{ summary.by.F.registered_eom }}</td>
+        <td>{{ summary.by.T.registered_eom }}</td>
+      </tr>
+      <tr>
+        <td class="text-start">% of enrolment as of end of month</td>
+        <td>{{ summary.by.M.pct_enrol_eom }}%</td>
+        <td>{{ summary.by.F.pct_enrol_eom }}%</td>
+        <td>{{ summary.by.T.pct_enrol_eom }}%</td>
+      </tr>
+      <tr>
+        <td class="text-start">Average Daily Attendance</td>
+        <td>{{ summary.by.M.ada }}</td>
+        <td>{{ summary.by.F.ada }}</td>
+        <td>{{ summary.by.T.ada }}</td>
+      </tr>
+      <tr>
+        <td class="text-start">% of attendance for the month</td>
+        <td>{{ summary.by.M.pct_attendance }}%</td>
+        <td>{{ summary.by.F.pct_attendance }}%</td>
+        <td>{{ summary.by.T.pct_attendance }}%</td>
+      </tr>
+      <tr>
+        <td class="text-start">Students absent for 5 consecutive days</td>
+        <td>{{ summary.by.M.absent5 }}</td>
+        <td>{{ summary.by.F.absent5 }}</td>
+        <td>{{ summary.by.T.absent5 }}</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+{% if non_school_days %}
+<div class="mt-2">
+  <div class="small text-muted">Excluded from school days:</div>
+  <ul class="small">
+    {% for d in non_school_days %}
+      <li>{{ d.date }} - {{ d.get_kind_display }}: {{ d.title }}</li>
+    {% endfor %}
+  </ul>
+  </div>
+{% endif %}
+{% endif %}
+{% endblock %}

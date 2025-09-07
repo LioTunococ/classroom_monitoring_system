@@ -1,0 +1,16 @@
+[Unit]
+Description=Gunicorn CMS
+After=network.target
+
+[Service]
+User=www-data
+Group=www-data
+WorkingDirectory=/opt/cms
+Environment="DJANGO_DEBUG=false" "DJANGO_SECRET_KEY=change-me" "DJANGO_ALLOWED_HOSTS=example.com"
+ExecStart=/opt/cms/.venv/bin/gunicorn cms.wsgi:application --bind 127.0.0.1:8000 --workers 3
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+

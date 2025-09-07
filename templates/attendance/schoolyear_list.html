@@ -1,0 +1,30 @@
+{% extends 'attendance/base.html' %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center">
+  <h1 class="h4">School Years</h1>
+  <a class="btn btn-success" href="{% url 'attendance:schoolyear_create' %}">Add School Year</a>
+</div>
+
+<div class="table-responsive mt-3">
+<table class="table table-striped align-middle">
+  <thead>
+    <tr><th>Name</th><th>Start</th><th>End</th><th>Active</th><th>Edit</th><th>Enroll</th><th>Attendance</th></tr>
+  </thead>
+  <tbody>
+    {% for sy in schoolyears %}
+      <tr>
+        <td>{{ sy.name }}</td>
+        <td>{{ sy.start_date }}</td>
+        <td>{{ sy.end_date }}</td>
+        <td>{% if sy.is_active %}<span class="badge bg-primary">Active</span>{% endif %}</td>
+        <td><a class="btn btn-sm btn-outline-secondary" href="{% url 'attendance:schoolyear_edit' sy.id %}">Edit</a></td>
+        <td><a class="btn btn-sm btn-outline-secondary" href="{% url 'attendance:enroll_students' sy.id %}">Manage</a></td>
+        <td><a class="btn btn-sm btn-outline-primary" href="{% url 'attendance:take_attendance' sy.id %}">Open</a></td>
+      </tr>
+    {% empty %}
+      <tr><td colspan="6" class="text-muted">No school years yet.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div>
+{% endblock %}
