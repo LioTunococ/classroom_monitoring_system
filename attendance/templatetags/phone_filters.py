@@ -53,3 +53,10 @@ def phone_no_plus(value):
     e164 = _to_ph_e164(value)
     return e164[1:] if e164.startswith('+') else e164
 
+
+@register.filter(name='dict_get')
+def dict_get(d, key):
+    try:
+        return d.get(key)
+    except Exception:
+        return None

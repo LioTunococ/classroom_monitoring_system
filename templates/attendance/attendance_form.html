@@ -1,7 +1,7 @@
 {% extends 'attendance/base.html' %}
 {% load phone_filters %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+<div class="d-flex justify-content-between align-items-center flex-wrap gap-2 sticky-filter">
   <h1 class="h4 mb-0">Attendance: {{ schoolyear.name }}</h1>
   <form id="date-form" method="get" class="d-flex align-items-center gap-2 flex-wrap">
     <div class="btn-group" role="group" aria-label="Quick date nav">
@@ -24,6 +24,68 @@
   {{ formset.management_form }}
   <input type="hidden" name="date" value="{{ target_date|date:'Y-m-d' }}">
 
+  <div class="d-flex flex-wrap gap-2 mb-2 align-items-center">
+    <button type="button" class="btn btn-sm btn-outline-success" id="btn-all-present">Mark ALL Present</button>
+    <button type="button" class="btn btn-sm btn-outline-success" id="btn-am-present">AM Present</button>
+    <button type="button" class="btn btn-sm btn-outline-success" id="btn-pm-present">PM Present</button>
+    <span class="badge rounded-pill text-bg-secondary" id="marked-counter">Marked 0/0</span>
+    <div class="form-check ms-auto">
+      <input class="form-check-input" type="checkbox" id="chk-only-unmarked">
+      <label class="form-check-label" for="chk-only-unmarked">Show only unmarked</label>
+    </div>
+    <div class="form-check">
+      <input class="form-check-input" type="checkbox" id="chk-only-ale">
+      <label class="form-check-label" for="chk-only-ale">Show only Absent/Late/Excused</label>
+    </div>
+    <button type="button" class="btn btn-sm btn-outline-secondary" id="btn-next-ale">Jump to next A/L/E</button>
+  </div>
+
+  {% if periods %}
+    <div class="alert alert-info">Per-period attendance enabled. Default is Present for all periods. Mark Late to capture time-in.</div>
+    {% for e in enrollments_period %}
+      <div class="card mb-2 shadow-sm student-card" data-name="{{ e.student_name|default:''|lower }}">
+        <div class="card-body">
+          <div class="mb-2 d-flex justify-content-between align-items-center gap-2 flex-wrap">
+            <div class="student-name">{{ e.student_name }}</div>
+            <div class="d-flex gap-1 flex-wrap">
+              {% if e.guardian_phone %}
+                <a href="#" class="btn btn-sm btn-outline-secondary js-sms"
+                   data-phone="{{ e.guardian_phone|phone_e164 }}"
+                   title="Compose SMS to parent">SMS</a>
+              {% endif %}
+            </div>
+            <div class="d-flex gap-1 ms-auto">
+              <button type="button" class="btn btn-sm btn-outline-success js-row-all-p" title="Mark all periods Present">All P</button>
+              <button type="button" class="btn btn-sm btn-outline-secondary js-row-clear" title="Clear time-in and set Present">Clear</button>
+            </div>
+          </div>
+          <div class="periods-wrap">
+            {% for p in periods %}
+            <div class="period-chip">
+              <div class="title text-center">{{ p.name }}</div>
+              <div class="sub text-center">{{ p.half }}</div>
+              <div class="chip-group" role="group" aria-label="{{ p.name }}">
+                <input type="radio" name="p_{{ e.enrollment_id }}_{{ p.id }}_status" id="p{{ e.enrollment_id }}_{{ p.id }}_P" value="P" {% if e.statuses|dict_get:p.id|default:'P' == 'P' %}checked{% endif %}>
+                <label class="btn btn-outline-success" for="p{{ e.enrollment_id }}_{{ p.id }}_P">P</label>
+                <input type="radio" name="p_{{ e.enrollment_id }}_{{ p.id }}_status" id="p{{ e.enrollment_id }}_{{ p.id }}_A" value="A" {% if e.statuses|dict_get:p.id == 'A' %}checked{% endif %}>
+                <label class="btn btn-outline-danger" for="p{{ e.enrollment_id }}_{{ p.id }}_A">A</label>
+                <input type="radio" name="p_{{ e.enrollment_id }}_{{ p.id }}_status" id="p{{ e.enrollment_id }}_{{ p.id }}_L" value="L" {% if e.statuses|dict_get:p.id == 'L' %}checked{% endif %}>
+                <label class="btn btn-outline-warning" for="p{{ e.enrollment_id }}_{{ p.id }}_L">L</label>
+                <input type="radio" name="p_{{ e.enrollment_id }}_{{ p.id }}_status" id="p{{ e.enrollment_id }}_{{ p.id }}_E" value="E" {% if e.statuses|dict_get:p.id == 'E' %}checked{% endif %}>
+                <label class="btn btn-outline-info" for="p{{ e.enrollment_id }}_{{ p.id }}_E">E</label>
+              </div>
+              <div class="time">
+                <input type="time" class="form-control form-control-sm" name="ti_{{ e.enrollment_id }}_{{ p.id }}" lang="en-GB" placeholder="HH:MM" step="60" inputmode="numeric" value="{{ e.time_in|dict_get:p.id }}">
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    {% empty %}
+      <div class="alert alert-info">No enrolled students.</div>
+    {% endfor %}
+  {% else %}
   {% for form in formset %}
     {{ form.enrollment_id }}
     {# keep the disabled input in DOM but hide it; render name as heading for space #}
@@ -36,12 +98,6 @@
               <a href="#" class="btn btn-sm btn-outline-secondary js-sms"
                  data-phone="{{ form.initial.guardian_phone|phone_e164 }}"
                  title="Compose SMS to parent">SMS</a>
-              <a href="#" class="btn btn-sm btn-outline-success js-wa"
-                 data-phone-wa="{{ form.initial.guardian_phone|phone_wa }}"
-                 title="Open WhatsApp chat">WhatsApp</a>
-              <a href="#" class="btn btn-sm btn-outline-info js-viber"
-                 data-phone-noplus="{{ form.initial.guardian_phone|phone_no_plus }}"
-                 title="Open Viber chat">Viber</a>
             {% endif %}
           </div>
           <div class="d-none">{{ form.student_name }}</div>
@@ -73,19 +129,27 @@
           </div>
         </div>
         <div class="mt-2">
-          <label class="form-label mb-1">Remarks</label>
-          {{ form.remarks }}
+          <button type="button" class="btn btn-sm btn-outline-secondary" data-toggle-remarks>+ Add note</button>
+          <div class="mt-2 d-none" data-remarks-area>
+            <label class="form-label mb-1">Remarks</label>
+            {{ form.remarks }}
+          </div>
         </div>
       </div>
     </div>
   {% empty %}
     <div class="alert alert-info">No enrolled students.</div>
   {% endfor %}
+  {% endif %}
 </form>
 
 <div class="action-bar border-top bg-body">
   <div class="inner container d-flex flex-column flex-sm-row gap-2">
-    <button class="btn btn-primary w-100 flex-fill" form="attendance-form" type="submit">Save Attendance</button>
+    <div class="btn-group w-100">
+      <button class="btn btn-outline-secondary d-none d-sm-inline" id="btn-prev-day" type="button">Prev Day</button>
+      <button class="btn btn-primary flex-fill" id="btn-save" type="submit" form="attendance-form">Save</button>
+      <button class="btn btn-outline-secondary d-none d-sm-inline" id="btn-next-day" type="button">Next Day</button>
+    </div>
     <a class="btn btn-outline-secondary w-100 w-sm-auto" href="{% url 'attendance:schoolyear_list' %}">Back</a>
   </div>
 </div>
@@ -181,6 +245,17 @@
   // Preserve scroll on save and show a toast when returning
   (function(){
     const form = document.getElementById('attendance-form');
+    // Hook prev/next day via hidden nav field
+    const navInput = document.createElement('input');
+    navInput.type = 'hidden'; navInput.name = 'nav';
+    form && form.appendChild(navInput);
+    function submitWithNav(val){
+      if (!form) return;
+      navInput.value = val;
+      form.requestSubmit ? form.requestSubmit() : form.submit();
+    }
+    document.getElementById('btn-prev-day')?.addEventListener('click', ()=> submitWithNav('prev'));
+    document.getElementById('btn-next-day')?.addEventListener('click', ()=> submitWithNav('next'));
     let submitting = false;
     if (form) {
       form.addEventListener('submit', function(){
@@ -220,7 +295,7 @@
     function isiOS(){ return /iPhone|iPad|iPod/i.test(navigator.userAgent); }
     document.addEventListener('click', function(e){
       var t = e.target;
-      if (t && t.classList && (t.classList.contains('js-sms') || t.classList.contains('js-wa') || t.classList.contains('js-viber'))){
+      if (t && t.classList && t.classList.contains('js-sms')){
         e.preventDefault();
         var card = t.closest('.student-card');
         var nameEl = card ? card.querySelector('.student-name') : null;
@@ -246,19 +321,259 @@
           bodyText = 'Naimbag nga aldaw, parent. Maipakaammo nga ni ' + name + ' ket ' + contextText + ' ita nga aldaw. Thank you';
         }
         var enc = encodeURIComponent(bodyText);
-        if (t.classList.contains('js-sms')){
-          var phone = t.getAttribute('data-phone') || '';
-          var href = isiOS() ? ('sms:' + phone + '&body=' + enc) : ('sms:' + phone + '?body=' + enc);
-          window.location.href = href;
-        } else if (t.classList.contains('js-wa')){
-          var pwa = t.getAttribute('data-phone-wa') || '';
-          window.open('https://wa.me/' + pwa + '?text=' + enc, '_blank');
-        } else if (t.classList.contains('js-viber')){
-          var pnp = t.getAttribute('data-phone-noplus') || '';
-          // Viber URI cannot prefill text reliably; open chat only
-          window.location.href = 'viber://chat?number=%2B' + pnp;
-        }
+        var phone = t.getAttribute('data-phone') || '';
+        var href = isiOS() ? ('sms:' + phone + '&body=' + enc) : ('sms:' + phone + '?body=' + enc);
+        window.location.href = href;
       }
+    }, { passive: false });
+  })();
+</script>
+<script>
+  // Auto time-in on Late, and enable/disable time inputs accordingly
+  (function(){
+    function nowHM(){
+      const d = new Date();
+      const hh = String(d.getHours()).padStart(2,'0');
+      const mm = String(d.getMinutes()).padStart(2,'0');
+      return `${hh}:${mm}`;
+    }
+    function pairTimeInput(radio){
+      // radio name: p_<enrollmentId>_<periodId>_status
+      const name = radio && radio.name ? radio.name : '';
+      const m = name.match(/^p_(\d+)_(\d+)_status$/);
+      if (!m) return null;
+      const eid = m[1], pid = m[2];
+      return document.querySelector(`input[type="time"][name="ti_${eid}_${pid}"]`);
+    }
+    function applyState(radio){
+      const ti = pairTimeInput(radio);
+      if (!ti) return;
+      if (radio.value === 'L' && radio.checked){
+        ti.disabled = false;
+        // Show the time input when Late is selected
+        const wrap = ti.closest('.time'); if (wrap) wrap.style.display = '';
+        if (!ti.value){ ti.value = nowHM(); }
+      } else if (radio.checked) {
+        // If switching away from Late on this group, clear and disable and hide
+        ti.value = '';
+        ti.disabled = true;
+        const wrap = ti.closest('.time'); if (wrap) wrap.style.display = 'none';
+      }
+    }
+    // On load: disable all time inputs unless corresponding Late is selected or a value exists
+    document.querySelectorAll('input[type="time"][name^="ti_"]').forEach(ti => {
+      if (ti.value) { ti.disabled = false; const w=ti.closest('.time'); if (w) w.style.display=''; return; }
+      // find group's radios
+      const parts = (ti.getAttribute('name')||'').match(/^ti_(\d+)_(\d+)$/);
+      if (!parts) { ti.disabled = true; return; }
+      const eid = parts[1], pid = parts[2];
+      const late = document.getElementById(`p${eid}_${pid}_L`);
+      if (late && late.checked){ ti.disabled = false; const w=ti.closest('.time'); if (w) w.style.display=''; if (!ti.value) ti.value = nowHM(); }
+      else { ti.disabled = true; const w=ti.closest('.time'); if (w) w.style.display='none'; }
+    });
+    function setGroupValue(card, groupName, value){
+      const target = card.querySelector(`input[type=radio][name="${CSS.escape(groupName)}"][value="${value}"]`);
+      if (target){
+        target.checked = true;
+        applyState(target);
+        // ensure other radios in the same group clear their time inputs if any
+        const siblings = card.querySelectorAll(`input[type=radio][name="${CSS.escape(groupName)}"]`);
+        siblings.forEach(r => { if (r !== target) applyState(r); });
+      }
+    }
+    function listGroupNames(card){
+      const names = [];
+      const seen = new Set();
+      card.querySelectorAll('input[type=radio][name^="p_"]').forEach(r => {
+        const nm = r.name;
+        if (!seen.has(nm)){ seen.add(nm); names.push(nm); }
+      });
+      return names;
+    }
+    function cascadeFrom(card, changedName, value){
+      const names = listGroupNames(card);
+      const idx = names.indexOf(changedName);
+      if (idx < 0) return;
+      if (value === 'A'){
+        for (let i = idx; i < names.length; i++) setGroupValue(card, names[i], 'A');
+      } else if (value === 'P'){
+        for (let i = idx; i < names.length; i++) setGroupValue(card, names[i], 'P');
+      } else if (value === 'L'){
+        // current late with time-in; succeeding present
+        setGroupValue(card, names[idx], 'L');
+        for (let i = idx+1; i < names.length; i++) setGroupValue(card, names[i], 'P');
+      } else if (value === 'E'){
+        // mark excused from here to end
+        for (let i = idx; i < names.length; i++) setGroupValue(card, names[i], 'E');
+      }
+    }
+    // Listen for any status change and apply + cascade
+    document.addEventListener('change', function(e){
+      const t = e.target;
+      if (!t || t.type !== 'radio') return;
+      applyState(t);
+      if (t.name && /^p_\d+_\d+_status$/.test(t.name)){
+        const card = t.closest('.student-card');
+        if (card) cascadeFrom(card, t.name, t.value);
+      }
+    }, { passive: true });
+
+    // Quick jump to next A/L/E row
+    (function(){
+      const btn = document.getElementById('btn-next-ale'); if (!btn) return;
+      function hasAnyALE(card){
+        const sel = card.querySelectorAll('input[type=radio][name^="p_"]:checked');
+        for (const r of sel){ if (r.value !== 'P') return true; }
+        const am = card.querySelector('input[type=radio][name$="status_am"]:checked');
+        const pm = card.querySelector('input[type=radio][name$="status_pm"]:checked');
+        return (am && am.value !== 'P') || (pm && pm.value !== 'P');
+      }
+      btn.addEventListener('click', function(){
+        const cards = Array.from(document.querySelectorAll('.student-card'));
+        const y = window.scrollY || 0;
+        const next = cards.find(c => (c.getBoundingClientRect().top + y) > y + 8 && hasAnyALE(c));
+        if (next){ next.scrollIntoView({behavior:'smooth', block:'start'}); }
+        else if (window.showToast){ window.showToast('No next A/L/E row', 'info'); }
+      });
+    })();
+  })();
+</script>
+<script>
+  // Haptics, counter, and remarks toggles
+  (function(){
+    const form = document.getElementById('attendance-form');
+    const counter = document.getElementById('marked-counter');
+    const cards = Array.from(document.querySelectorAll('.student-card'));
+    function hasBothSelected(card){
+      // Per-period mode: ensure each period group has a checked radio
+      const perAll = card.querySelectorAll('input[type=radio][name^="p_"]');
+      if (perAll && perAll.length){
+        const groupNames = new Set(Array.from(perAll).map(r => r.name));
+        const checkedNames = new Set(Array.from(card.querySelectorAll('input[type=radio][name^="p_"]:checked')).map(r => r.name));
+        return checkedNames.size === groupNames.size;
+      }
+      // AM/PM mode fallback
+      const am = card.querySelector('input[type=radio][name$="status_am"]:checked');
+      const pm = card.querySelector('input[type=radio][name$="status_pm"]:checked');
+      return !!(am && pm);
+    }
+    function updateCounter(){
+      const total = cards.length || 0;
+      const marked = cards.filter(hasBothSelected).length;
+      if (counter) counter.textContent = `Marked ${marked}/${total}`;
+    }
+    // Initialize
+    updateCounter();
+    if (form){
+      form.addEventListener('change', function(e){
+        const t = e.target;
+        if (t && t.matches('input[type=radio]')){
+          if (navigator.vibrate) try { navigator.vibrate(15); } catch(_) {}
+          updateCounter();
+        }
+      }, { passive: true });
+    }
+    // Remarks toggles
+    document.addEventListener('click', function(e){
+      const btn = e.target.closest('[data-toggle-remarks]');
+      if (!btn) return;
+      const card = btn.closest('.student-card');
+      const area = card && card.querySelector('[data-remarks-area]');
+      if (!area) return;
+      area.classList.toggle('d-none');
+      btn.textContent = area.classList.contains('d-none') ? '+ Add note' : 'Hide note';
+    });
+  })();
+</script>
+<script>
+  // Mobile helpers: search filter and quick mark actions
+  (function(){
+    const form = document.getElementById('attendance-form');
+    if (!form) return;
+    // Filter by name
+    const input = document.getElementById('filter-input');
+    const cards = Array.from(document.querySelectorAll('.student-card'));
+    function applyFilter(){
+      if (!input) return;
+      const q = (input.value || '').trim().toLowerCase();
+      cards.forEach(c => {
+        const hay = (c.getAttribute('data-name') || '').toLowerCase();
+        c.style.display = (!q || hay.includes(q)) ? '' : 'none';
+      });
+    }
+    if (input) input.addEventListener('input', applyFilter, { passive: true });
+
+    // Quick mark buttons
+    function setAll(suffix, value){
+      const radios = form.querySelectorAll(`input[type=radio][name$="${suffix}"]`);
+      const names = new Set(Array.from(radios).map(r => r.name));
+      names.forEach(n => {
+        const r = form.querySelector(`input[type=radio][name="${CSS.escape(n)}"][value="${value}"]`);
+        if (r) r.checked = true;
+      });
+    }
+    document.getElementById('btn-all-present')?.addEventListener('click', ()=>{
+      setAll('status_am', 'P');
+      setAll('status_pm', 'P');
+      if (window.showToast) window.showToast('Marked all AM/PM as Present', 'success');
+    });
+    document.getElementById('btn-am-present')?.addEventListener('click', ()=>{
+      setAll('status_am', 'P');
+      if (window.showToast) window.showToast('Marked AM as Present', 'success');
+    });
+    document.getElementById('btn-pm-present')?.addEventListener('click', ()=>{
+      setAll('status_pm', 'P');
+      if (window.showToast) window.showToast('Marked PM as Present', 'success');
+    });
+
+    // Show only unmarked toggle
+    const chkOnly = document.getElementById('chk-only-unmarked');
+    const chkALE = document.getElementById('chk-only-ale');
+    function hasBothSelected(card){
+      const am = card.querySelector('input[type=radio][name$="status_am"]:checked');
+      const pm = card.querySelector('input[type=radio][name$="status_pm"]:checked');
+      return !!(am && pm);
+    }
+    function hasAnyALE(card){
+      // Per-period mode: any selected radio not P
+      const per = card.querySelectorAll('input[type=radio][name^="p_"]:checked');
+      if (per && per.length){
+        for (const r of per){ if (r.value !== 'P') return true; }
+        return false;
+      }
+      // AM/PM mode
+      const am = card.querySelector('input[type=radio][name$="status_am"]:checked');
+      const pm = card.querySelector('input[type=radio][name$="status_pm"]:checked');
+      return (am && am.value !== 'P') || (pm && pm.value !== 'P');
+    }
+    function applyOnlyUnmarked(){
+      const enabled = !!(chkOnly && chkOnly.checked);
+      cards.forEach(card => { card.style.display = (enabled && hasBothSelected(card)) ? 'none' : ''; });
+    }
+    function applyOnlyALE(){
+      const enabled = !!(chkALE && chkALE.checked);
+      cards.forEach(card => { card.style.display = (enabled && !hasAnyALE(card)) ? 'none' : ''; });
+    }
+    if (chkOnly) chkOnly.addEventListener('change', applyOnlyUnmarked);
+    if (chkALE) chkALE.addEventListener('change', applyOnlyALE);
+
+    // Per-row helpers
+    function setRowAllPresent(card){
+      const radios = card.querySelectorAll('input[type=radio][name^="p_"]');
+      const names = new Set(Array.from(radios).map(r => r.name));
+      names.forEach(n => {
+        const r = card.querySelector(`input[type=radio][name="${CSS.escape(n)}"][value="P"]`);
+        if (r){ r.checked = true; }
+      });
+      // Clear time-ins
+      card.querySelectorAll('input[type="time"][name^="ti_"]').forEach(ti => { ti.value=''; ti.disabled=true; });
+      if (window.showToast) window.showToast('Set all periods to Present', 'success');
+    }
+    document.addEventListener('click', function(e){
+      const btnP = e.target.closest('.js-row-all-p');
+      if (btnP){ e.preventDefault(); const card = btnP.closest('.student-card'); if (card) setRowAllPresent(card); }
+      const btnC = e.target.closest('.js-row-clear');
+      if (btnC){ e.preventDefault(); const card = btnC.closest('.student-card'); if (card) setRowAllPresent(card); }
     }, { passive: false });
   })();
 </script>

@@ -17,10 +17,13 @@ urlpatterns = [
     path('enroll/<int:schoolyear_id>/', views.enroll_students, name='enroll_students'),
     path('attendance/<int:schoolyear_id>/', views.take_attendance, name='take_attendance'),
     path('sections/<int:schoolyear_id>/assign/', views.bulk_assign_section, name='bulk_assign_section'),
+    path('periods/<int:schoolyear_id>/', views.manage_periods, name='manage_periods'),
+    path('periods/<int:schoolyear_id>/<int:pk>/edit/', views.edit_period, name='edit_period'),
     path('reports/monthly/', views.report_form, name='report_form'),
     path('reports/monthly/export/', views.export_monthly_report, name='export_monthly_report'),
     path('reports/monthly/preview/', views.report_preview, name='report_preview'),
     path('non-school-days/import/', views.non_school_days_import, name='non_school_days_import'),
     path('notifications/', views.notifications, name='notifications'),
     path('notifications/mark-all-read/', views.notifications_mark_all_read, name='notifications_mark_all_read'),
+    # Server-side bulk SMS removed; phone-based SMS only
 ]

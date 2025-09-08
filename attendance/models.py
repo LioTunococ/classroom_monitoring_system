@@ -135,3 +135,40 @@ class Notification(models.Model):
 
     def __str__(self):
         return f"{self.user}: {self.message}"
+
+
+class Period(models.Model):
+    HALF_CHOICES = (
+        ("AM", "AM"),
+        ("PM", "PM"),
+    )
+    school_year = models.ForeignKey(SchoolYear, on_delete=models.CASCADE, related_name="periods")
+    name = models.CharField(max_length=50)
+    order = models.PositiveIntegerField(default=1)
+    half = models.CharField(max_length=2, choices=HALF_CHOICES, default="AM")
+    start_time = models.TimeField(blank=True, null=True)
+    end_time = models.TimeField(blank=True, null=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        ordering = ["order", "id"]
+        unique_together = ("school_year", "name")
+
+    def __str__(self):
+        return f"{self.school_year} - {self.name} ({self.half})"
+
+
+class AttendancePeriodRecord(models.Model):
+    enrollment = models.ForeignKey(Enrollment, on_delete=models.CASCADE, related_name="period_attendance")
+    date = models.DateField()
+    period = models.ForeignKey(Period, on_delete=models.CASCADE, related_name="attendance_records")
+    status = models.CharField(max_length=1, choices=STATUS_CHOICES, default="P")
+    time_in = models.TimeField(blank=True, null=True)
+    remarks = models.CharField(max_length=255, blank=True)
+
+    class Meta:
+        unique_together = ("enrollment", "date", "period")
+        ordering = ["-date", "period__order", "enrollment__student__last_name"]
+
+    def __str__(self):
+        return f"{self.enrollment} - {self.date} {self.period.name}: {self.get_status_display()}"

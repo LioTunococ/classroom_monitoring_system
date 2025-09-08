@@ -50,13 +50,6 @@
                    data-phone="{{ s.guardian_phone|phone_e164 }}"
                    data-body="{{ sms_msg|urlencode }}"
                    title="Compose SMS to parent">SMS</a>
-                <a class="btn btn-sm btn-outline-success"
-                   target="_blank"
-                   href="https://wa.me/{{ s.guardian_phone|phone_wa }}?text={{ sms_msg|urlencode }}"
-                   title="Open WhatsApp chat">WhatsApp</a>
-                <a class="btn btn-sm btn-outline-info"
-                   href="viber://chat?number=%2B{{ s.guardian_phone|phone_no_plus }}"
-                   title="Open Viber chat">Viber</a>
               {% endwith %}
             {% endif %}
             {% if s.is_active %}

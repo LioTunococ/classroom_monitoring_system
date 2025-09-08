@@ -1,6 +1,6 @@
 from django import forms
 from django.forms import formset_factory
-from .models import Student, SchoolYear, Enrollment, STATUS_CHOICES
+from .models import Student, SchoolYear, Enrollment, STATUS_CHOICES, Period
 
 
 def _apply_bootstrap_controls(form):
@@ -78,3 +78,20 @@ class SingleAttendanceForm(forms.Form):
 
 
 AttendanceFormSet = formset_factory(SingleAttendanceForm, extra=0)
+
+
+"""Removed messaging settings form (server-side SMS disabled)."""
+
+
+class PeriodForm(forms.ModelForm):
+    class Meta:
+        model = Period
+        fields = ['name', 'order', 'half', 'start_time', 'end_time', 'is_active']
+        widgets = {
+            'start_time': forms.TimeInput(attrs={'type': 'time'}),
+            'end_time': forms.TimeInput(attrs={'type': 'time'}),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        _apply_bootstrap_controls(self)

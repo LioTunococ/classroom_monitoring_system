@@ -39,6 +39,17 @@
       background-color: var(--bs-info); border-color: var(--bs-info); color: #042a2b;
     }
 
+    /* Bigger, thumb-friendly status buttons on phones */
+    @media (max-width: 576px) {
+      .att-status label.btn {
+        padding: .6rem .9rem;
+        font-weight: 600;
+        min-width: 4.25rem;
+        text-align: center;
+      }
+      .student-card .form-label { font-size: .95rem; }
+    }
+
     /* Card header layout on small screens: stack name and controls */
     @media (max-width: 576px) {
       .student-card .card-body > .d-flex { flex-direction: column; gap: .75rem; }
@@ -56,6 +67,31 @@
 
     /* Sticky filter bars inside pages (under the navbar) */
     .sticky-filter { position: sticky; top: 0; z-index: 1020; background: var(--bs-body-bg); padding-top: .25rem; }
+
+    /* Period chips layout for phones */
+    .periods-wrap { display: flex; gap: .75rem; overflow-x: auto; padding-bottom: .25rem; }
+    .period-chip { flex: 0 0 auto; min-width: 8.5rem; border: 1px solid var(--bs-border-color); border-radius: .5rem; padding: .5rem; }
+    .period-chip .title { font-weight: 600; }
+    .period-chip .sub { font-size: .75rem; color: var(--bs-secondary-color); margin-top: -2px; }
+    .chip-group { display:flex; gap:.35rem; flex-wrap:wrap; justify-content:center; margin-top:.35rem; }
+    .chip-group input[type="radio"]{ position:absolute; opacity:0; width:0; height:0; }
+    .chip-group label.btn{ padding:.35rem .5rem; font-weight:600; }
+    .period-chip .time { margin-top:.35rem; }
+    @media (max-width:576px){ .period-chip{ min-width:7.5rem; } }
+
+    /* Apply the same selected-state styles to chip groups */
+    .chip-group input[type="radio"]:checked + label.btn.btn-outline-success {
+      background-color: var(--bs-success); border-color: var(--bs-success); color: #fff;
+    }
+    .chip-group input[type="radio"]:checked + label.btn.btn-outline-danger {
+      background-color: var(--bs-danger); border-color: var(--bs-danger); color: #fff;
+    }
+    .chip-group input[type="radio"]:checked + label.btn.btn-outline-warning {
+      background-color: var(--bs-warning); border-color: var(--bs-warning); color: var(--bs-dark);
+    }
+    .chip-group input[type="radio"]:checked + label.btn.btn-outline-info {
+      background-color: var(--bs-info); border-color: var(--bs-info); color: #042a2b;
+    }
   </style>
   {% load static %}
   <link rel="manifest" href="{% static 'pwa/manifest.webmanifest' %}">
@@ -78,11 +114,13 @@
         {% if request.user.is_staff or request.user.is_superuser %}
           <li class="nav-item"><a class="nav-link" href="{% url 'attendance:student_list' %}">Students</a></li>
           <li class="nav-item"><a class="nav-link" href="{% url 'attendance:schoolyear_list' %}">School Years</a></li>
+          
         {% endif %}
         <li class="nav-item"><a class="nav-link" href="{% url 'attendance:report_form' %}">Reports</a></li>
         {% if active_sy %}
           <li class="nav-item"><a class="nav-link" href="{% url 'attendance:enroll_students' active_sy.id %}">Enroll</a></li>
           <li class="nav-item"><a class="nav-link" href="{% url 'attendance:take_attendance' active_sy.id %}">Attendance</a></li>
+          <li class="nav-item"><a class="nav-link" href="{% url 'attendance:manage_periods' active_sy.id %}">Periods</a></li>
           <li class="nav-item"><a class="nav-link" href="{% url 'attendance:bulk_assign_section' active_sy.id %}">Assign Section</a></li>
         {% endif %}
       </ul>

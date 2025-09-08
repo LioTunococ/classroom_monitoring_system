@@ -1,4 +1,4 @@
-from calendar import monthrange
+﻿from calendar import monthrange
 import calendar as _cal
 from datetime import date, timedelta
 from django.core.cache import cache
@@ -8,13 +8,13 @@ from io import TextIOWrapper
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Q, Count
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 
-from .forms import AttendanceFormSet, SchoolYearForm, StudentForm
-from .models import AttendanceSessionRecord, Enrollment, SchoolYear, Student, Section, NonSchoolDay, Notification
+from .forms import AttendanceFormSet, SchoolYearForm, StudentForm, PeriodForm
+from .models import AttendanceSessionRecord, Enrollment, SchoolYear, Student, Section, NonSchoolDay, Notification, Period, AttendancePeriodRecord
 
 # Status codes used across reports and dashboard
 STATUS_CODES = ('P', 'A', 'L', 'E')
@@ -148,6 +148,9 @@ def _user_sections_for_sy(user, sy):
     return Section.objects.filter(school_year=sy, adviser=user)
 
 
+# Server-side SMS helpers removed (using phone-based SMS only)
+
+
 @login_required
 def dashboard(request):
     sy = _get_active_school_year()
@@ -164,6 +167,8 @@ def dashboard(request):
 
     upcoming_birthdays = []
     summary = {}
+    top_absent = []
+    top_late = []
     if sy:
         # Gather birthdays falling within the next 14 days using a days-until calculation
         enrollments_qs = Enrollment.objects.filter(school_year=sy, active=True).select_related('student')
@@ -213,12 +218,18 @@ def dashboard(request):
                 am_counts[r.status] = am_counts.get(r.status, 0) + 1
                 if r.status in am_lists:
                     s = r.enrollment.student
-                    am_lists[r.status].append(f"{s.last_name}, {s.first_name}")
+                    am_lists[r.status].append({
+                        'name': f"{s.last_name}, {s.first_name}",
+                        'phone': s.guardian_phone or '',
+                    })
             elif r.session == 'PM':
                 pm_counts[r.status] = pm_counts.get(r.status, 0) + 1
                 if r.status in pm_lists:
                     s = r.enrollment.student
-                    pm_lists[r.status].append(f"{s.last_name}, {s.first_name}")
+                    pm_lists[r.status].append({
+                        'name': f"{s.last_name}, {s.first_name}",
+                        'phone': s.guardian_phone or '',
+                    })
 
         # Missing records by session
         missing_lists = {'AM': [], 'PM': []}
@@ -246,6 +257,61 @@ def dashboard(request):
             'is_complete': (recorded_sessions == total_sessions and total_sessions > 0),
         }
 
+        # Top absences and lates for the current month (bounded by School Year)
+        month_start = date(view_date.year, view_date.month, 1)
+        ms = max(sy.start_date, month_start)
+        last_day = monthrange(view_date.year, view_date.month)[1]
+        month_end = date(view_date.year, view_date.month, last_day)
+        me = min(sy.end_date, month_end)
+        agg = (
+            AttendanceSessionRecord.objects.filter(
+                enrollment__in=enrollments_qs,
+                date__gte=ms,
+                date__lte=me,
+            )
+            .values(
+                'enrollment__student__id',
+                'enrollment__student__last_name',
+                'enrollment__student__first_name',
+            )
+            .annotate(
+                abs_sess=Count('id', filter=Q(status='A')),
+                late_sess=Count('id', filter=Q(status='L')),
+            )
+        )
+
+        for row in agg:
+            name = f"{row['enrollment__student__last_name']}, {row['enrollment__student__first_name']}"
+            sid = row['enrollment__student__id']
+            a = int(row.get('abs_sess') or 0)
+            l = int(row.get('late_sess') or 0)
+            if a > 0:
+                top_absent.append({
+                    'student_id': sid,
+                    'student_name': name,
+                    'abs_sessions': a,
+                    'days_absent_equiv': round(a / 2.0, 1),
+                })
+            if l > 0:
+                top_late.append({
+                    'student_id': sid,
+                    'student_name': name,
+                    'late_sessions': l,
+                })
+
+        # Sort and keep top 5 each
+        top_absent.sort(key=lambda x: (x['abs_sessions'], x['student_name']), reverse=True)
+        top_late.sort(key=lambda x: (x['late_sessions'], x['student_name']), reverse=True)
+        top_absent = top_absent[:5]
+        top_late = top_late[:5]
+        top_period_label = ms.strftime('%b %Y')
+        # Compute month navigation enablement
+        cur_month_start = date(view_date.year, view_date.month, 1)
+        prev_month = (cur_month_start - timedelta(days=1)).replace(day=1)
+        next_month = (date(view_date.year + (1 if view_date.month == 12 else 0), (1 if view_date.month == 12 else view_date.month + 1), 1))
+        can_prev_month = (prev_month >= sy.start_date)
+        can_next_month = (next_month <= sy.end_date)
+
     context = {
         'active_sy': sy,
         'today': date.today(),
@@ -253,6 +319,11 @@ def dashboard(request):
         'upcoming_birthdays': upcoming_birthdays,
         'summary': summary,
         'sections': list(sections_qs) if sy else [],
+        'top_absent': top_absent,
+        'top_late': top_late,
+        'top_period_label': top_period_label if sy else None,
+        'can_prev_month': can_prev_month if sy else False,
+        'can_next_month': can_next_month if sy else False,
     }
     return render(request, 'attendance/dashboard.html', context)
 
@@ -310,6 +381,8 @@ def student_edit(request, pk: int):
         form = StudentForm(instance=student)
     return render(request, 'attendance/student_form.html', {'form': form})
 
+
+@login_required
 
 @login_required
 def student_delete(request, pk: int):
@@ -451,31 +524,54 @@ def take_attendance(request, schoolyear_id: int):
             messages.error(request, 'No assigned section or no enrolled students for you in this school year.')
             return redirect('attendance:schoolyear_list')
     enrollments = list(enroll_qs)
+    periods_all = list(Period.objects.filter(school_year=sy, is_active=True).order_by('order', 'id'))
+    has_periods = len(periods_all) > 0
     sess_qs = AttendanceSessionRecord.objects.filter(enrollment__in=enrollments, date=target_date)
     existing = {}
     for rec in sess_qs:
         existing[(rec.enrollment_id, rec.session)] = rec
 
     initial = []
-    for e in enrollments:
-        student = e.student
-        am_rec = existing.get((e.id, 'AM'))
-        pm_rec = existing.get((e.id, 'PM'))
-        status_am = am_rec.status if am_rec else 'P'
-        # Do not infer PM from AM; keep existing PM or default to 'P'
-        status_pm = pm_rec.status if pm_rec else 'P'
-        remarks = (am_rec.remarks if am_rec else (pm_rec.remarks if pm_rec else ''))
-        initial.append({
-            'enrollment_id': e.id,
-            'student_name': f"{student.last_name}, {student.first_name}",
-            'guardian_phone': getattr(student, 'guardian_phone', ''),
-            'guardian_name': getattr(student, 'guardian_name', ''),
-            'status_am': status_am,
-            'status_pm': status_pm,
-            'remarks': remarks,
-        })
+    enrollments_period = []
+    if not has_periods:
+        for e in enrollments:
+            student = e.student
+            am_rec = existing.get((e.id, 'AM'))
+            pm_rec = existing.get((e.id, 'PM'))
+            status_am = am_rec.status if am_rec else 'P'
+            status_pm = pm_rec.status if pm_rec else 'P'
+            remarks = (am_rec.remarks if am_rec else (pm_rec.remarks if pm_rec else ''))
+            initial.append({
+                'enrollment_id': e.id,
+                'student_name': f"{student.last_name}, {student.first_name}",
+                'guardian_phone': getattr(student, 'guardian_phone', ''),
+                'guardian_name': getattr(student, 'guardian_name', ''),
+                'status_am': status_am,
+                'status_pm': status_pm,
+                'remarks': remarks,
+            })
+    else:
+        # Build per-period rendering data with existing records prefilled
+        recs = AttendancePeriodRecord.objects.filter(
+            enrollment__in=enrollments, date=target_date
+        ).select_related('period')
+        by_key = {(r.enrollment_id, r.period_id): r for r in recs}
+        for e in enrollments:
+            student = e.student
+            item = {
+                'enrollment_id': e.id,
+                'student_name': f"{student.last_name}, {student.first_name}",
+                'guardian_phone': getattr(student, 'guardian_phone', ''),
+                'statuses': {},
+                'time_in': {},
+            }
+            for p in periods_all:
+                r = by_key.get((e.id, p.id))
+                item['statuses'][p.id] = (r.status if r else 'P')
+                item['time_in'][p.id] = (r.time_in.strftime('%H:%M') if (r and r.time_in) else '')
+            enrollments_period.append(item)
 
-    if request.method == 'POST':
+    if request.method == 'POST' and not has_periods:
         formset = AttendanceFormSet(request.POST, initial=initial, prefix='att')
         if formset.is_valid():
             with transaction.atomic():
@@ -536,14 +632,102 @@ def take_attendance(request, schoolyear_id: int):
             messages.success(request, f"Attendance successfully saved for {target_date.strftime('%B %d, %Y') }.")
             # Redirect to dashboard and keep the selected date context
             return redirect(f"{reverse('attendance:dashboard')}?date={target_date}")
+    elif request.method == 'POST' and has_periods:
+        from django.db import transaction
+        with transaction.atomic():
+            for e in enrollments:
+                for p in periods_all:
+                    status = request.POST.get(f"p_{e.id}_{p.id}_status") or 'P'
+                    time_in = request.POST.get(f"ti_{e.id}_{p.id}") or None
+                    AttendancePeriodRecord.objects.update_or_create(
+                        enrollment=e, date=target_date, period=p,
+                        defaults={'status': status, 'time_in': time_in or None}
+                    )
+                def agg(half):
+                    qs = AttendancePeriodRecord.objects.filter(enrollment=e, date=target_date, period__half=half)
+                    n = qs.count()
+                    if n == 0:
+                        return 'P'
+                    absent = sum(1 for r in qs if r.status == 'A')
+                    late_any = any(r.status == 'L' for r in qs)
+                    exc_any = any(r.status == 'E' for r in qs)
+                    if absent * 2 >= n:
+                        return 'A'
+                    if late_any:
+                        return 'L'
+                    if exc_any:
+                        return 'E'
+                    return 'P'
+                am_status = agg('AM')
+                pm_status = agg('PM')
+                AttendanceSessionRecord.objects.update_or_create(
+                    enrollment=e, date=target_date, session='AM', defaults={'status': am_status}
+                )
+                AttendanceSessionRecord.objects.update_or_create(
+                    enrollment=e, date=target_date, session='PM', defaults={'status': pm_status}
+                )
+        messages.success(request, f"Attendance successfully saved for {target_date.strftime('%B %d, %Y') }.")
+        nav = request.POST.get('nav')
+        if nav == 'prev':
+            next_date = target_date - timedelta(days=1)
+            return redirect(f"{reverse('attendance:take_attendance', args=[sy.id])}?date={next_date}")
+        if nav == 'next':
+            next_date = target_date + timedelta(days=1)
+            return redirect(f"{reverse('attendance:take_attendance', args=[sy.id])}?date={next_date}")
+        return redirect(f"{reverse('attendance:dashboard')}?date={target_date}")
     else:
         formset = AttendanceFormSet(initial=initial, prefix='att')
 
-    return render(request, 'attendance/attendance_form.html', {
+    context = {
         'schoolyear': sy,
         'target_date': target_date,
         'formset': formset,
-    })
+    }
+    if has_periods:
+        context.update({
+            'periods': periods_all,
+            'periods_am': [p for p in periods_all if p.half == 'AM'],
+            'periods_pm': [p for p in periods_all if p.half == 'PM'],
+            'enrollments_period': enrollments_period,
+        })
+    return render(request, 'attendance/attendance_form.html', context)
+
+@login_required
+def manage_periods(request, schoolyear_id: int):
+    if not (request.user.is_staff or request.user.is_superuser):
+        messages.warning(request, 'You are not allowed to manage periods.')
+        return redirect('attendance:dashboard')
+    sy = get_object_or_404(SchoolYear, pk=schoolyear_id)
+    if request.method == 'POST':
+        form = PeriodForm(request.POST)
+        if form.is_valid():
+            obj = form.save(commit=False)
+            obj.school_year = sy
+            obj.save()
+            messages.success(request, f'Period {obj.name} added.')
+            return redirect('attendance:manage_periods', schoolyear_id=sy.id)
+    else:
+        form = PeriodForm()
+    periods = Period.objects.filter(school_year=sy).order_by('order', 'id')
+    return render(request, 'attendance/periods.html', {'schoolyear': sy, 'periods': periods, 'form': form})
+
+
+@login_required
+def edit_period(request, schoolyear_id: int, pk: int):
+    if not (request.user.is_staff or request.user.is_superuser):
+        messages.warning(request, 'You are not allowed to edit periods.')
+        return redirect('attendance:dashboard')
+    sy = get_object_or_404(SchoolYear, pk=schoolyear_id)
+    period = get_object_or_404(Period, pk=pk, school_year=sy)
+    if request.method == 'POST':
+        form = PeriodForm(request.POST, instance=period)
+        if form.is_valid():
+            form.save()
+            messages.success(request, f'Period {period.name} updated.')
+            return redirect('attendance:manage_periods', schoolyear_id=sy.id)
+    else:
+        form = PeriodForm(instance=period)
+    return render(request, 'attendance/period_edit.html', {'schoolyear': sy, 'form': form, 'period': period})
 
 
 @login_required
@@ -719,7 +903,7 @@ def report_form(request):
                     total_cols = len(days) + 8
                     cpd = [ (mpd[i] + fpd[i]) for i in range(len(days)) ]
             else:
-                # Selected month outside the school year range — show message and empty preview
+                # Selected month outside the school year range â€” show message and empty preview
                 messages.error(request, 'Selected month is outside the school year range.')
         except Exception:
             # On any unexpected error, keep preview empty but do not break the page
@@ -1083,3 +1267,4 @@ def non_school_days_import(request):
     return render(request, 'attendance/non_school_days_import.html', {
         'schoolyears': sys,
     })
+

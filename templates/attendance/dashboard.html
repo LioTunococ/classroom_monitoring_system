@@ -1,4 +1,5 @@
 {% extends 'attendance/base.html' %}
+{% load phone_filters %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
   <h1 class="h3 mb-0">Dashboard</h1>
@@ -8,6 +9,10 @@
       <button class="btn btn-outline-secondary" type="button" id="btn-prev">Prev</button>
       <button class="btn btn-outline-secondary" type="button" id="btn-today">Today</button>
       <button class="btn btn-outline-secondary" type="button" id="btn-next">Next</button>
+    </div>
+    <div class="btn-group ms-2" role="group" aria-label="Quick month nav">
+      <button class="btn btn-outline-secondary" type="button" id="btn-prev-month" {% if not can_prev_month %}disabled{% endif %}>Prev Month</button>
+      <button class="btn btn-outline-secondary" type="button" id="btn-next-month" {% if not can_next_month %}disabled{% endif %}>Next Month</button>
     </div>
     <input id="dash-date" type="date" class="form-control" name="date" value="{{ view_date|default:today|date:'Y-m-d' }}">
     <a class="btn btn-primary" href="{% url 'attendance:take_attendance' active_sy.id %}?date={{ view_date|default:today|date:'Y-m-d' }}">Take Attendance</a>
@@ -48,20 +53,51 @@
   <div class="col-12 col-md-6">
     <div class="card shadow-sm h-100">
       <div class="card-body">
-        <div class="text-muted small">AM Lists</div>
+        <div class="d-flex justify-content-between align-items-center">
+          <div class="text-muted small">AM Lists</div>
+          <div>
+            {% if summary.am_lists.A %}
+            <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="modal" data-bs-target="#modal-am-absent">Notify all Absent (AM)</button>
+            {% endif %}
+          </div>
+        </div>
         <div class="mb-1"><span class="badge text-bg-danger">Absent</span>
           {% if summary.am_lists.A %}
-            {% for n in summary.am_lists.A %}<span class="badge text-bg-light text-dark me-1">{{ n }}</span>{% endfor %}
+            {% for r in summary.am_lists.A %}
+              <span class="badge text-bg-light text-dark me-2 mt-1">{{ r.name }}</span>
+              {% if r.phone %}
+                {% with sms_msg="Attendance update for "|add:r.name|add:" (AM). Please contact the adviser." %}
+                  <a href="#" class="btn btn-sm btn-outline-secondary me-1 mt-1 js-sms"
+                     data-phone="{{ r.phone|phone_e164 }}"
+                     data-body="{{ sms_msg|urlencode }}"
+                     title="Compose SMS to parent">SMS</a>
+                {% endwith %}
+                <a class="btn btn-sm btn-outline-primary me-2 mt-1" href="tel:{{ r.phone|phone_e164 }}" title="Call parent">Call</a>
+              {% endif %}
+            {% endfor %}
           {% else %}<span class="text-muted">None</span>{% endif %}
         </div>
         <div class="mb-1"><span class="badge text-bg-warning text-dark">Late</span>
           {% if summary.am_lists.L %}
-            {% for n in summary.am_lists.L %}<span class="badge text-bg-light text-dark me-1">{{ n }}</span>{% endfor %}
+            {% for r in summary.am_lists.L %}
+              <span class="badge text-bg-light text-dark me-2 mt-1">{{ r.name }}</span>
+              {% if r.phone %}
+                {% with sms_msg="Attendance update for "|add:r.name|add:" (AM). Please contact the adviser." %}
+                  <a href="#" class="btn btn-sm btn-outline-secondary me-1 mt-1 js-sms"
+                     data-phone="{{ r.phone|phone_e164 }}"
+                     data-body="{{ sms_msg|urlencode }}"
+                     title="Compose SMS to parent">SMS</a>
+                {% endwith %}
+                <a class="btn btn-sm btn-outline-primary me-2 mt-1" href="tel:{{ r.phone|phone_e164 }}" title="Call parent">Call</a>
+              {% endif %}
+            {% endfor %}
           {% else %}<span class="text-muted">None</span>{% endif %}
         </div>
         <div><span class="badge text-bg-info text-dark">Excused</span>
           {% if summary.am_lists.E %}
-            {% for n in summary.am_lists.E %}<span class="badge text-bg-light text-dark me-1">{{ n }}</span>{% endfor %}
+            {% for r in summary.am_lists.E %}
+              <span class="badge text-bg-light text-dark me-1">{{ r.name }}</span>
+            {% endfor %}
           {% else %}<span class="text-muted">None</span>{% endif %}
         </div>
       </div>
@@ -70,26 +106,106 @@
   <div class="col-12 col-md-6">
     <div class="card shadow-sm h-100">
       <div class="card-body">
-        <div class="text-muted small">PM Lists</div>
+        <div class="d-flex justify-content-between align-items-center">
+          <div class="text-muted small">PM Lists</div>
+          <div>
+            {% if summary.pm_lists.A %}
+            <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="modal" data-bs-target="#modal-pm-absent">Notify all Absent (PM)</button>
+            {% endif %}
+          </div>
+        </div>
         <div class="mb-1"><span class="badge text-bg-danger">Absent</span>
           {% if summary.pm_lists.A %}
-            {% for n in summary.pm_lists.A %}<span class="badge text-bg-light text-dark me-1">{{ n }}</span>{% endfor %}
+            {% for r in summary.pm_lists.A %}
+              <span class="badge text-bg-light text-dark me-2 mt-1">{{ r.name }}</span>
+              {% if r.phone %}
+                {% with sms_msg="Attendance update for "|add:r.name|add:" (PM). Please contact the adviser." %}
+                  <a href="#" class="btn btn-sm btn-outline-secondary me-1 mt-1 js-sms"
+                     data-phone="{{ r.phone|phone_e164 }}"
+                     data-body="{{ sms_msg|urlencode }}"
+                     title="Compose SMS to parent">SMS</a>
+                {% endwith %}
+                <a class="btn btn-sm btn-outline-primary me-2 mt-1" href="tel:{{ r.phone|phone_e164 }}" title="Call parent">Call</a>
+              {% endif %}
+            {% endfor %}
           {% else %}<span class="text-muted">None</span>{% endif %}
         </div>
         <div class="mb-1"><span class="badge text-bg-warning text-dark">Late</span>
           {% if summary.pm_lists.L %}
-            {% for n in summary.pm_lists.L %}<span class="badge text-bg-light text-dark me-1">{{ n }}</span>{% endfor %}
+            {% for r in summary.pm_lists.L %}
+              <span class="badge text-bg-light text-dark me-2 mt-1">{{ r.name }}</span>
+              {% if r.phone %}
+                {% with sms_msg="Attendance update for "|add:r.name|add:" (PM). Please contact the adviser." %}
+                  <a href="#" class="btn btn-sm btn-outline-secondary me-1 mt-1 js-sms"
+                     data-phone="{{ r.phone|phone_e164 }}"
+                     data-body="{{ sms_msg|urlencode }}"
+                     title="Compose SMS to parent">SMS</a>
+                {% endwith %}
+                <a class="btn btn-sm btn-outline-primary me-2 mt-1" href="tel:{{ r.phone|phone_e164 }}" title="Call parent">Call</a>
+              {% endif %}
+            {% endfor %}
           {% else %}<span class="text-muted">None</span>{% endif %}
         </div>
         <div><span class="badge text-bg-info text-dark">Excused</span>
           {% if summary.pm_lists.E %}
-            {% for n in summary.pm_lists.E %}<span class="badge text-bg-light text-dark me-1">{{ n }}</span>{% endfor %}
+            {% for r in summary.pm_lists.E %}
+              <span class="badge text-bg-light text-dark me-1">{{ r.name }}</span>
+            {% endfor %}
           {% else %}<span class="text-muted">None</span>{% endif %}
         </div>
       </div>
     </div>
   </div>
-  
+
+  <div class="col-12 col-lg-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-baseline mb-2">
+          <div class="text-muted small">Top Absences</div>
+          <div class="text-muted small">{{ top_period_label }}</div>
+        </div>
+        {% if top_absent %}
+          <ul class="list-group list-group-flush">
+            {% for r in top_absent %}
+              <li class="list-group-item d-flex justify-content-between align-items-center">
+                <span><a href="{% url 'attendance:student_edit' r.student_id %}">{{ r.student_name }}</a></span>
+                <span>
+                  <span class="badge text-bg-danger me-1" title="Absent sessions">{{ r.abs_sessions }}</span>
+                  <span class="badge text-bg-secondary" title="Equivalent days">{{ r.days_absent_equiv }}</span>
+                </span>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <div class="text-muted">No absences in the recent period.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="col-12 col-lg-6">
+    <div class="card shadow-sm h-100">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-baseline mb-2">
+          <div class="text-muted small">Top Lates</div>
+          <div class="text-muted small">{{ top_period_label }}</div>
+        </div>
+        {% if top_late %}
+          <ul class="list-group list-group-flush">
+            {% for r in top_late %}
+              <li class="list-group-item d-flex justify-content-between align-items-center">
+                <span><a href="{% url 'attendance:student_edit' r.student_id %}">{{ r.student_name }}</a></span>
+                <span class="badge text-bg-warning text-dark" title="Late sessions">{{ r.late_sessions }}</span>
+              </li>
+            {% endfor %}
+          </ul>
+        {% else %}
+          <div class="text-muted">No lates in the recent period.</div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
 </div>
 
 {# Removed summary badge strip per request #}
@@ -118,6 +234,107 @@
 {% endif %}
 {% endblock %}
 
+{# Bulk notify modals #}
+{% if active_sy %}
+<div class="modal fade" id="modal-am-absent" tabindex="-1" aria-labelledby="modal-am-absent-label" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modal-am-absent-label">Notify All Absent (AM)</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        {% if summary.am_lists.A %}
+        <div class="mb-3">
+          <label class="form-label small">Message</label>
+          <textarea id="am-absent-text" class="form-control form-control-sm" rows="3">Naimbag nga aldaw, parent. Maipakaammo nga ABSENT ita nga aldaw ti ubbing yo. Agyamanak.</textarea>
+          <div class="form-text">Tip: You can edit this before sending. For bulk SMS from your phone, use the button below.</div>
+          <div class="d-flex gap-2 mt-2">
+            <button class="btn btn-sm btn-outline-primary" type="button" data-sms-group data-phones-src="#am-absent-numbers" data-body-src="#am-absent-text">Compose group SMS</button>
+            <button class="btn btn-sm btn-outline-secondary" type="button" data-copy-target="#am-absent-numbers">Copy all numbers</button>
+          </div>
+        </div>
+        <textarea id="am-absent-numbers" class="form-control form-control-sm d-none" readonly>{% for r in summary.am_lists.A %}{% if r.phone %}{{ r.phone|phone_e164 }}{% if not forloop.last %}, {% endif %}{% endif %}{% endfor %}</textarea>
+        <div class="list-group">
+          {% for r in summary.am_lists.A %}
+            <div class="list-group-item d-flex justify-content-between align-items-center">
+              <div>
+                <div class="fw-semibold">{{ r.name }}</div>
+                <div class="text-muted small">{{ r.phone|default:'No phone' }}</div>
+              </div>
+              <div class="btn-group">
+                {% if r.phone %}
+                {% with sms_msg="Attendance update for "|add:r.name|add:" (AM). Please contact the adviser." %}
+                <a href="#" class="btn btn-sm btn-outline-secondary js-sms" data-phone="{{ r.phone|phone_e164 }}" data-body="{{ sms_msg|urlencode }}">SMS</a>
+                {% endwith %}
+                {% else %}
+                <button class="btn btn-sm btn-outline-secondary" type="button" disabled>No contact</button>
+                {% endif %}
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+        {% else %}
+          <div class="text-muted">No AM absentees.</div>
+        {% endif %}
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+  </div>
+
+<div class="modal fade" id="modal-pm-absent" tabindex="-1" aria-labelledby="modal-pm-absent-label" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="modal-pm-absent-label">Notify All Absent (PM)</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        {% if summary.pm_lists.A %}
+        <div class="mb-3">
+          <label class="form-label small">Message</label>
+          <textarea id="pm-absent-text" class="form-control form-control-sm" rows="3">Naimbag nga aldaw, parent. Maipakaammo nga ABSENT ita nga aldaw ti ubbing yo. Agyamanak.</textarea>
+          <div class="form-text">Tip: You can edit this before sending. For bulk SMS from your phone, use the button below.</div>
+          <div class="d-flex gap-2 mt-2">
+            <button class="btn btn-sm btn-outline-primary" type="button" data-sms-group data-phones-src="#pm-absent-numbers" data-body-src="#pm-absent-text">Compose group SMS</button>
+            <button class="btn btn-sm btn-outline-secondary" type="button" data-copy-target="#pm-absent-numbers">Copy all numbers</button>
+          </div>
+        </div>
+        <textarea id="pm-absent-numbers" class="form-control form-control-sm d-none" readonly>{% for r in summary.pm_lists.A %}{% if r.phone %}{{ r.phone|phone_e164 }}{% if not forloop.last %}, {% endif %}{% endif %}{% endfor %}</textarea>
+        <div class="list-group">
+          {% for r in summary.pm_lists.A %}
+            <div class="list-group-item d-flex justify-content-between align-items-center">
+              <div>
+                <div class="fw-semibold">{{ r.name }}</div>
+                <div class="text-muted small">{{ r.phone|default:'No phone' }}</div>
+              </div>
+              <div class="btn-group">
+                {% if r.phone %}
+                {% with sms_msg="Attendance update for "|add:r.name|add:" (PM). Please contact the adviser." %}
+                <a href="#" class="btn btn-sm btn-outline-secondary js-sms" data-phone="{{ r.phone|phone_e164 }}" data-body="{{ sms_msg|urlencode }}">SMS</a>
+                {% endwith %}
+                {% else %}
+                <button class="btn btn-sm btn-outline-secondary" type="button" disabled>No contact</button>
+                {% endif %}
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+        {% else %}
+          <div class="text-muted">No PM absentees.</div>
+        {% endif %}
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+  </div>
+{% endif %}
+
 {% block extra_js %}
 <script>
   // Dashboard date nav: auto-submit and quick buttons
@@ -127,6 +344,8 @@
     const btnPrev = document.getElementById('btn-prev');
     const btnNext = document.getElementById('btn-next');
     const btnToday = document.getElementById('btn-today');
+    const btnPrevM = document.getElementById('btn-prev-month');
+    const btnNextM = document.getElementById('btn-next-month');
     if (!form || !input) return;
     function iso(d){ return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10); }
     function getDate(){ const v=input.value; if(!v) return null; const p=v.split('-').map(Number); return new Date(p[0],p[1]-1,p[2]); }
@@ -135,6 +354,91 @@
     if (btnPrev) btnPrev.addEventListener('click', ()=>{ const d=getDate()||new Date(); d.setDate(d.getDate()-1); submit(d); });
     if (btnNext) btnNext.addEventListener('click', ()=>{ const d=getDate()||new Date(); d.setDate(d.getDate()+1); submit(d); });
     if (btnToday) btnToday.addEventListener('click', ()=> submit(new Date()));
+    if (btnPrevM) btnPrevM.addEventListener('click', ()=>{ if (btnPrevM.disabled) return; const d=getDate()||new Date(); d.setDate(1); d.setMonth(d.getMonth()-1); submit(d); });
+    if (btnNextM) btnNextM.addEventListener('click', ()=>{ if (btnNextM.disabled) return; const d=getDate()||new Date(); d.setDate(1); d.setMonth(d.getMonth()+1); submit(d); });
+  })();
+</script>
+<script>
+  // Open SMS compose with platform-appropriate format for dashboard
+  (function(){
+    function isiOS(){ return /iPhone|iPad|iPod/i.test(navigator.userAgent); }
+    document.addEventListener('click', function(e){
+      var t = e.target;
+      if (t && t.classList && t.classList.contains('js-sms')){
+        e.preventDefault();
+        var phone = t.getAttribute('data-phone') || '';
+        var body = t.getAttribute('data-body') || '';
+        try { body = encodeURIComponent(decodeURIComponent(body)); } catch(_) {}
+        var href = isiOS() ? ('sms:' + phone + '&body=' + body) : ('sms:' + phone + '?body=' + body);
+        window.location.href = href;
+      }
+    }, { passive: false });
+  })();
+</script>
+<script>
+  // Copy helper and group SMS for bulk modals
+  (function(){
+    function isiOS(){ return /iPhone|iPad|iPod/i.test(navigator.userAgent); }
+    function parsePhones(raw){
+      if (!raw) return [];
+      const out = [];
+      const seen = new Set();
+      const re = /\+?\d[\d\s-]*/g;
+      let m;
+      while ((m = re.exec(raw))){
+        const digits = (m[0]||'').replace(/[^\d+]/g,'');
+        if (!digits) continue;
+        if (!seen.has(digits)) { seen.add(digits); out.push(digits); }
+      }
+      return out;
+    }
+    function buildSmsHref(phones, body){
+      const ios = isiOS();
+      const sep = ios ? ',' : ';';
+      const addr = phones.join(sep);
+      const enc = encodeURIComponent(body||'');
+      const paramSep = ios ? '&' : '?';
+      return 'sms:' + addr + paramSep + 'body=' + enc;
+    }
+
+    // Compose group SMS button
+    document.addEventListener('click', function(e){
+      const btn = e.target.closest('[data-sms-group]');
+      if (!btn) return;
+      const taSel = btn.getAttribute('data-phones-src');
+      const bodySel = btn.getAttribute('data-body-src');
+      const ta = taSel ? document.querySelector(taSel) : null;
+      const bodyEl = bodySel ? document.querySelector(bodySel) : null;
+      const phones = parsePhones(ta ? ta.value : '');
+      const body = bodyEl ? bodyEl.value : '';
+      if (!phones.length){ if (window.showToast) window.showToast('No phone numbers found', 'error'); return; }
+      if (phones.length > 20){
+        const ok = window.confirm(`Compose group SMS to ${phones.length} recipients? Some phones limit recipients.`);
+        if (!ok) return;
+      }
+      const href = buildSmsHref(phones, body);
+      try { window.location.href = href; } catch(_) {}
+    }, { passive: false });
+
+    // Backend bulk send removed; no submit confirmation needed
+    // Copy numbers/template
+    document.addEventListener('click', function(e){
+      const t = e.target;
+      if (!t || !t.matches('[data-copy-target]')) return;
+      const sel = t.getAttribute('data-copy-target');
+      const el = sel ? document.querySelector(sel) : null;
+      if (!el) return;
+      el.classList.remove('d-none');
+      el.select();
+      try {
+        document.execCommand('copy');
+        if (window.showToast) window.showToast('Copied to clipboard', 'success');
+      } catch(_) {
+        if (window.showToast) window.showToast('Copy failed', 'error');
+      }
+      el.classList.add('d-none');
+      el.blur();
+    }, { passive: false });
   })();
 </script>
 {% endblock %}
