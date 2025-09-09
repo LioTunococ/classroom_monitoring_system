@@ -43,6 +43,7 @@
           <td>{{ s.sex }}</td>
           <td>{{ s.birthdate|default:'—' }}</td>
           <td class="actions">
+            <a class="btn btn-sm btn-outline-secondary" href="{% url 'attendance:student_history' s.id %}">History</a>
             <a class="btn btn-sm btn-outline-primary" href="{% url 'attendance:student_edit' s.id %}">Edit</a>
             {% if s.guardian_phone %}
               {% with sms_msg="Attendance update for "|add:s.last_name|add:", "|add:s.first_name|add:". Please contact the adviser." %}

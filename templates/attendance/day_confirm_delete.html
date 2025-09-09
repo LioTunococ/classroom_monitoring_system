@@ -1,0 +1,16 @@
+{% extends 'attendance/base.html' %}
+{% block content %}
+<h1 class="h5">Delete Attendance for {{ target_date }}</h1>
+<div class="alert alert-warning">
+  <p class="mb-1">You are about to delete all attendance records for <strong>{{ target_date|date:'F d, Y' }}</strong> in <strong>{{ schoolyear.name }}</strong>.</p>
+  <p class="mb-0 small">This will remove {{ sess_count }} session record(s){% if per_count %} and {{ per_count }} period record(s){% endif %} for that day.</p>
+  <p class="mb-0 small">This action cannot be undone.</p>
+  <p class="mb-0 small">Are you sure you want to proceed?</p>
+  </div>
+
+<form method="post">{% csrf_token %}
+  <button type="submit" class="btn btn-danger">Delete</button>
+  <a href="{% url 'attendance:report_form' %}?schoolyear_id={{ schoolyear.id }}&year={{ year }}&month={{ month }}" class="btn btn-outline-secondary">Cancel</a>
+</form>
+{% endblock %}
+

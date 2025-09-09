@@ -67,6 +67,8 @@
 
     /* Sticky filter bars inside pages (under the navbar) */
     .sticky-filter { position: sticky; top: 0; z-index: 1020; background: var(--bs-body-bg); padding-top: .25rem; }
+    /* Secondary sticky bar that sits below the page header */
+    .sticky-filter-2 { position: sticky; top: 3.25rem; z-index: 1019; background: var(--bs-body-bg); }
 
     /* Period chips layout for phones */
     .periods-wrap { display: flex; gap: .75rem; overflow-x: auto; padding-bottom: .25rem; }
@@ -92,6 +94,17 @@
     .chip-group input[type="radio"]:checked + label.btn.btn-outline-info {
       background-color: var(--bs-info); border-color: var(--bs-info); color: #042a2b;
     }
+    /* Distinct, high-contrast tint for PM periods on phones */
+    .period-chip.pm {
+      background: linear-gradient(to bottom, rgba(255,193,7,.16), rgba(255,193,7,.08)); /* amber */
+      border-left: 4px solid rgba(255,193,7,.7);
+    }
+    .period-chip.pm .sub { color: #d97706; }
+    /* Viewing date highlight */
+    .viewing-date { display:flex; align-items:center; gap:.5rem; padding:.35rem .6rem; border:1px solid var(--bs-border-color); border-radius:.5rem; background: var(--bs-body-bg); }
+    .viewing-date .date-main { font-weight:700; font-size:1.05rem; }
+    .viewing-date .dow { color: var(--bs-secondary-color); font-size:.95rem; }
+    @media (max-width:576px){ .viewing-date .date-main{ font-size:1.1rem; } }
   </style>
   {% load static %}
   <link rel="manifest" href="{% static 'pwa/manifest.webmanifest' %}">
@@ -111,17 +124,31 @@
     </button>
     <div class="collapse navbar-collapse" id="mainNav">
       <ul class="navbar-nav me-auto">
-        {% if request.user.is_staff or request.user.is_superuser %}
-          <li class="nav-item"><a class="nav-link" href="{% url 'attendance:student_list' %}">Students</a></li>
-          <li class="nav-item"><a class="nav-link" href="{% url 'attendance:schoolyear_list' %}">School Years</a></li>
-          
-        {% endif %}
-        <li class="nav-item"><a class="nav-link" href="{% url 'attendance:report_form' %}">Reports</a></li>
-        {% if active_sy %}
-          <li class="nav-item"><a class="nav-link" href="{% url 'attendance:enroll_students' active_sy.id %}">Enroll</a></li>
-          <li class="nav-item"><a class="nav-link" href="{% url 'attendance:take_attendance' active_sy.id %}">Attendance</a></li>
-          <li class="nav-item"><a class="nav-link" href="{% url 'attendance:manage_periods' active_sy.id %}">Periods</a></li>
-          <li class="nav-item"><a class="nav-link" href="{% url 'attendance:bulk_assign_section' active_sy.id %}">Assign Section</a></li>
+        {% if request.user.is_authenticated %}
+          {% if caps.manage_students %}
+            <li class="nav-item"><a class="nav-link" href="{% url 'attendance:student_list' %}">Students</a></li>
+          {% endif %}
+          {% if caps.manage_schoolyears %}
+            <li class="nav-item"><a class="nav-link" href="{% url 'attendance:schoolyear_list' %}">School Years</a></li>
+            <li class="nav-item"><a class="nav-link" href="{% url 'attendance:access_users' %}">Access</a></li>
+          {% endif %}
+          {% if caps.view_reports %}
+            <li class="nav-item"><a class="nav-link" href="{% url 'attendance:report_form' %}">Reports</a></li>
+          {% endif %}
+          {% if active_sy %}
+            {% if caps.enroll_students %}
+              <li class="nav-item"><a class="nav-link" href="{% url 'attendance:enroll_students' active_sy.id %}">Enroll</a></li>
+            {% endif %}
+            {% if caps.take_attendance %}
+              <li class="nav-item"><a class="nav-link" href="{% url 'attendance:take_attendance' active_sy.id %}">Attendance</a></li>
+            {% endif %}
+            {% if caps.manage_periods %}
+              <li class="nav-item"><a class="nav-link" href="{% url 'attendance:manage_periods' active_sy.id %}">Periods</a></li>
+            {% endif %}
+            {% if caps.assign_section %}
+              <li class="nav-item"><a class="nav-link" href="{% url 'attendance:bulk_assign_section' active_sy.id %}">Assign Section</a></li>
+            {% endif %}
+          {% endif %}
         {% endif %}
       </ul>
       <ul class="navbar-nav">

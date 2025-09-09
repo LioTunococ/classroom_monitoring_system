@@ -1,0 +1,15 @@
+{% extends 'attendance/base.html' %}
+{% block content %}
+<h1 class="h5">Unmark Non-School Day</h1>
+<div class="alert alert-warning">
+  <p class="mb-1">You are about to unmark <strong>{{ target_date|date:'F d, Y' }}</strong> as a Non-School Day for <strong>{{ schoolyear.name }}</strong>.</p>
+  <p class="mb-0 small">This will include this date back as a possible school day in reports.</p>
+  <p class="mb-0 small">Are you sure you want to proceed?</p>
+</div>
+
+<form method="post">{% csrf_token %}
+  <button type="submit" class="btn btn-danger">Unmark</button>
+  <a href="{% url 'attendance:report_form' %}?schoolyear_id={{ schoolyear.id }}&year={{ year }}&month={{ month }}" class="btn btn-outline-secondary">Cancel</a>
+</form>
+{% endblock %}
+

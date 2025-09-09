@@ -56,8 +56,10 @@
         <div class="d-flex justify-content-between align-items-center">
           <div class="text-muted small">AM Lists</div>
           <div>
+            {% if request.user.is_staff or request.user.is_superuser or caps.manage_schoolyears %}
             {% if summary.am_lists.A %}
             <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="modal" data-bs-target="#modal-am-absent">Notify all Absent (AM)</button>
+            {% endif %}
             {% endif %}
           </div>
         </div>
@@ -65,6 +67,7 @@
           {% if summary.am_lists.A %}
             {% for r in summary.am_lists.A %}
               <span class="badge text-bg-light text-dark me-2 mt-1">{{ r.name }}</span>
+              {% if request.user.is_staff or request.user.is_superuser or caps.manage_schoolyears %}
               {% if r.phone %}
                 {% with sms_msg="Attendance update for "|add:r.name|add:" (AM). Please contact the adviser." %}
                   <a href="#" class="btn btn-sm btn-outline-secondary me-1 mt-1 js-sms"
@@ -74,6 +77,7 @@
                 {% endwith %}
                 <a class="btn btn-sm btn-outline-primary me-2 mt-1" href="tel:{{ r.phone|phone_e164 }}" title="Call parent">Call</a>
               {% endif %}
+              {% endif %}
             {% endfor %}
           {% else %}<span class="text-muted">None</span>{% endif %}
         </div>
@@ -81,6 +85,7 @@
           {% if summary.am_lists.L %}
             {% for r in summary.am_lists.L %}
               <span class="badge text-bg-light text-dark me-2 mt-1">{{ r.name }}</span>
+              {% if request.user.is_staff or request.user.is_superuser or caps.manage_schoolyears %}
               {% if r.phone %}
                 {% with sms_msg="Attendance update for "|add:r.name|add:" (AM). Please contact the adviser." %}
                   <a href="#" class="btn btn-sm btn-outline-secondary me-1 mt-1 js-sms"
@@ -89,6 +94,7 @@
                      title="Compose SMS to parent">SMS</a>
                 {% endwith %}
                 <a class="btn btn-sm btn-outline-primary me-2 mt-1" href="tel:{{ r.phone|phone_e164 }}" title="Call parent">Call</a>
+              {% endif %}
               {% endif %}
             {% endfor %}
           {% else %}<span class="text-muted">None</span>{% endif %}
@@ -109,8 +115,10 @@
         <div class="d-flex justify-content-between align-items-center">
           <div class="text-muted small">PM Lists</div>
           <div>
+            {% if request.user.is_staff or request.user.is_superuser or caps.manage_schoolyears %}
             {% if summary.pm_lists.A %}
             <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="modal" data-bs-target="#modal-pm-absent">Notify all Absent (PM)</button>
+            {% endif %}
             {% endif %}
           </div>
         </div>
@@ -118,6 +126,7 @@
           {% if summary.pm_lists.A %}
             {% for r in summary.pm_lists.A %}
               <span class="badge text-bg-light text-dark me-2 mt-1">{{ r.name }}</span>
+              {% if request.user.is_staff or request.user.is_superuser or caps.manage_schoolyears %}
               {% if r.phone %}
                 {% with sms_msg="Attendance update for "|add:r.name|add:" (PM). Please contact the adviser." %}
                   <a href="#" class="btn btn-sm btn-outline-secondary me-1 mt-1 js-sms"
@@ -127,6 +136,7 @@
                 {% endwith %}
                 <a class="btn btn-sm btn-outline-primary me-2 mt-1" href="tel:{{ r.phone|phone_e164 }}" title="Call parent">Call</a>
               {% endif %}
+              {% endif %}
             {% endfor %}
           {% else %}<span class="text-muted">None</span>{% endif %}
         </div>
@@ -134,6 +144,7 @@
           {% if summary.pm_lists.L %}
             {% for r in summary.pm_lists.L %}
               <span class="badge text-bg-light text-dark me-2 mt-1">{{ r.name }}</span>
+              {% if request.user.is_staff or request.user.is_superuser or caps.manage_schoolyears %}
               {% if r.phone %}
                 {% with sms_msg="Attendance update for "|add:r.name|add:" (PM). Please contact the adviser." %}
                   <a href="#" class="btn btn-sm btn-outline-secondary me-1 mt-1 js-sms"
@@ -142,6 +153,7 @@
                      title="Compose SMS to parent">SMS</a>
                 {% endwith %}
                 <a class="btn btn-sm btn-outline-primary me-2 mt-1" href="tel:{{ r.phone|phone_e164 }}" title="Call parent">Call</a>
+              {% endif %}
               {% endif %}
             {% endfor %}
           {% else %}<span class="text-muted">None</span>{% endif %}
@@ -168,7 +180,7 @@
           <ul class="list-group list-group-flush">
             {% for r in top_absent %}
               <li class="list-group-item d-flex justify-content-between align-items-center">
-                <span><a href="{% url 'attendance:student_edit' r.student_id %}">{{ r.student_name }}</a></span>
+                <span><a href="{% url 'attendance:student_history' r.student_id %}">{{ r.student_name }}</a></span>
                 <span>
                   <span class="badge text-bg-danger me-1" title="Absent sessions">{{ r.abs_sessions }}</span>
                   <span class="badge text-bg-secondary" title="Equivalent days">{{ r.days_absent_equiv }}</span>
@@ -194,7 +206,7 @@
           <ul class="list-group list-group-flush">
             {% for r in top_late %}
               <li class="list-group-item d-flex justify-content-between align-items-center">
-                <span><a href="{% url 'attendance:student_edit' r.student_id %}">{{ r.student_name }}</a></span>
+                <span><a href="{% url 'attendance:student_history' r.student_id %}">{{ r.student_name }}</a></span>
                 <span class="badge text-bg-warning text-dark" title="Late sessions">{{ r.late_sessions }}</span>
               </li>
             {% endfor %}
@@ -236,6 +248,7 @@
 
 {# Bulk notify modals #}
 {% if active_sy %}
+{% if request.user.is_staff or request.user.is_superuser or caps.manage_schoolyears %}
 <div class="modal fade" id="modal-am-absent" tabindex="-1" aria-labelledby="modal-am-absent-label" aria-hidden="true">
   <div class="modal-dialog modal-dialog-scrollable">
     <div class="modal-content">
@@ -333,6 +346,7 @@
     </div>
   </div>
   </div>
+{% endif %}
 {% endif %}
 
 {% block extra_js %}

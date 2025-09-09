@@ -1,0 +1,37 @@
+{% extends 'attendance/base.html' %}
+{% block content %}
+<h1 class="h5">Manage Access</h1>
+<form class="row g-2 mt-2" method="get">
+  <div class="col-auto"><input type="search" class="form-control" name="q" value="{{ q }}" placeholder="Search users..."></div>
+  <div class="col-auto"><button class="btn btn-primary" type="submit">Search</button></div>
+</form>
+
+<div class="table-responsive mt-3">
+  <table class="table table-striped align-middle">
+    <thead>
+      <tr>
+        <th>User</th>
+        <th class="d-none d-sm-table-cell">Name</th>
+        <th>Sections</th>
+        <th>Allow</th>
+        <th>Deny</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for it in items %}
+        <tr>
+          <td><strong>{{ it.user.username }}</strong></td>
+          <td class="d-none d-sm-table-cell">{{ it.user.last_name }}, {{ it.user.first_name }}</td>
+          <td><span class="badge text-bg-secondary">{{ it.sec_count }}</span></td>
+          <td><span class="badge text-bg-success">{{ it.feat_allow }}</span></td>
+          <td><span class="badge text-bg-danger">{{ it.feat_deny }}</span></td>
+          <td><a class="btn btn-sm btn-primary" href="{% url 'attendance:access_edit' it.user.id %}">Edit</a></td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="6" class="text-muted">No users found.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

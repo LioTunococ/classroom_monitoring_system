@@ -12,9 +12,11 @@ from django.db.models import Q, Count
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.contrib.auth import get_user_model
 
 from .forms import AttendanceFormSet, SchoolYearForm, StudentForm, PeriodForm
-from .models import AttendanceSessionRecord, Enrollment, SchoolYear, Student, Section, NonSchoolDay, Notification, Period, AttendancePeriodRecord
+from .permissions import has_feature
+from .models import AttendanceSessionRecord, Enrollment, SchoolYear, Student, Section, NonSchoolDay, Notification, Period, AttendancePeriodRecord, SectionAccess
 
 # Status codes used across reports and dashboard
 STATUS_CODES = ('P', 'A', 'L', 'E')
@@ -172,10 +174,11 @@ def dashboard(request):
     if sy:
         # Gather birthdays falling within the next 14 days using a days-until calculation
         enrollments_qs = Enrollment.objects.filter(school_year=sy, active=True).select_related('student')
-        # Scope by adviser if not staff
+        # Scope by adviser or officer sections if not staff
         is_staffish = (request.user.is_staff or request.user.is_superuser)
         if not is_staffish:
-            enrollments_qs = enrollments_qs.filter(section__adviser=request.user)
+            officer_section_ids = list(SectionAccess.objects.filter(user=request.user, section__school_year=sy).values_list('section_id', flat=True))
+            enrollments_qs = enrollments_qs.filter(Q(section__adviser=request.user) | Q(section_id__in=officer_section_ids))
         for enr in enrollments_qs:
             b = enr.student.birthdate
             if not b:
@@ -194,7 +197,7 @@ def dashboard(request):
         total_enrolled = enrollments_qs.count()
         sections_qs = Section.objects.filter(school_year=sy)
         if not is_staffish:
-            sections_qs = sections_qs.filter(adviser=request.user)
+            sections_qs = sections_qs.filter(Q(adviser=request.user) | Q(id__in=officer_section_ids))
         section_count = sections_qs.count()
 
         # Attendance progress for selected day (session-based)
@@ -330,7 +333,7 @@ def dashboard(request):
 
 @login_required
 def student_list(request):
-    if not (request.user.is_staff or request.user.is_superuser):
+    if not has_feature(request.user, 'manage_students'):
         messages.warning(request, 'You are not allowed to view Students.')
         return redirect('attendance:dashboard')
     show_archived = request.GET.get('archived') == '1'
@@ -351,7 +354,7 @@ def student_list(request):
 
 @login_required
 def student_create(request):
-    if not (request.user.is_staff or request.user.is_superuser):
+    if not has_feature(request.user, 'manage_students'):
         messages.warning(request, 'You are not allowed to add Students.')
         return redirect('attendance:dashboard')
     if request.method == 'POST':
@@ -367,7 +370,7 @@ def student_create(request):
 
 @login_required
 def student_edit(request, pk: int):
-    if not (request.user.is_staff or request.user.is_superuser):
+    if not has_feature(request.user, 'manage_students'):
         messages.warning(request, 'You are not allowed to edit Students.')
         return redirect('attendance:dashboard')
     student = get_object_or_404(Student, pk=pk)
@@ -386,7 +389,7 @@ def student_edit(request, pk: int):
 
 @login_required
 def student_delete(request, pk: int):
-    if not (request.user.is_staff or request.user.is_superuser):
+    if not has_feature(request.user, 'manage_students'):
         messages.warning(request, 'You are not allowed to delete Students.')
         return redirect('attendance:dashboard')
     student = get_object_or_404(Student, pk=pk)
@@ -411,7 +414,7 @@ def student_delete(request, pk: int):
 
 @login_required
 def student_archive(request, pk: int):
-    if not (request.user.is_staff or request.user.is_superuser):
+    if not has_feature(request.user, 'manage_students'):
         messages.warning(request, 'You are not allowed to archive Students.')
         return redirect('attendance:dashboard')
     student = get_object_or_404(Student, pk=pk)
@@ -423,7 +426,7 @@ def student_archive(request, pk: int):
 
 @login_required
 def student_restore(request, pk: int):
-    if not (request.user.is_staff or request.user.is_superuser):
+    if not has_feature(request.user, 'manage_students'):
         messages.warning(request, 'You are not allowed to restore Students.')
         return redirect('attendance:dashboard')
     student = get_object_or_404(Student, pk=pk)
@@ -434,8 +437,107 @@ def student_restore(request, pk: int):
 
 
 @login_required
+def student_history(request, pk: int):
+    if not has_feature(request.user, 'view_student_history'):
+        messages.warning(request, 'You are not allowed to view student history.')
+        return redirect('attendance:dashboard')
+    student = get_object_or_404(Student, pk=pk)
+
+    sy_param = request.GET.get('schoolyear_id')
+    try:
+        sy = get_object_or_404(SchoolYear, pk=int(sy_param)) if sy_param else _get_active_school_year()
+    except Exception:
+        sy = _get_active_school_year()
+    if not sy:
+        messages.error(request, 'No active school year found.')
+        return redirect('attendance:dashboard')
+    today = date.today()
+    try:
+        year = int(request.GET.get('year') or today.year)
+        month = int(request.GET.get('month') or today.month)
+    except Exception:
+        year, month = today.year, today.month
+
+    enrollment = Enrollment.objects.filter(student=student, school_year=sy, active=True).select_related('section').first()
+    if not enrollment:
+        messages.info(request, f'{student} is not enrolled in {sy.name}.')
+        return render(request, 'attendance/student_history.html', {
+            'student': student, 'schoolyear': sy, 'year': year, 'month': month, 'days': [], 'entries': [], 'counts': {},
+        })
+
+    first_day = date(year, month, 1)
+    last_day = date(year, month, monthrange(year, month)[1])
+    range_start = max(first_day, sy.start_date)
+    range_end = min(last_day, sy.end_date)
+    if range_start > range_end:
+        days = []
+    else:
+        days = [range_start + timedelta(n) for n in range((range_end - range_start).days + 1)]
+
+    recs = AttendanceSessionRecord.objects.filter(enrollment=enrollment, date__gte=range_start, date__lte=range_end)
+    by_key = {(r.date, r.session): r for r in recs}
+    entries = []
+    counts = {'P': 0.0, 'A': 0.0, 'L': 0.0, 'E': 0.0}
+    for d in days:
+        am = by_key.get((d, 'AM'))
+        pm = by_key.get((d, 'PM'))
+        ams = am.status if am else ''
+        pms = pm.status if pm else ''
+        for s in (ams, pms):
+            if s:
+                counts[s] = counts.get(s, 0.0) + 0.5
+                if s in PRESENT_SET and s != 'P':
+                    counts['P'] += 0.5
+        severity = 'ok'
+        if ams == 'A' or pms == 'A':
+            severity = 'abs'
+        elif ams == 'L' or pms == 'L':
+            severity = 'late'
+        elif ams == 'E' or pms == 'E':
+            severity = 'exc'
+        entries.append({
+            'day': d,
+            'am': ams,
+            'pm': pms,
+            'remarks': ', '.join(filter(None, [getattr(am, 'remarks', ''), getattr(pm, 'remarks', '')])),
+            'sev': severity,
+        })
+
+    non_school_days = set(NonSchoolDay.objects.filter(school_year=sy, date__gte=range_start, date__lte=range_end).values_list('date', flat=True))
+    # Build calendar grid (Mon-Sun)
+    month_first = date(year, month, 1)
+    last_day = monthrange(year, month)[1]
+    month_last = date(year, month, last_day)
+    # Monday=0
+    grid_start = month_first - timedelta(days=month_first.weekday())
+    grid_end = month_last + timedelta(days=(6 - month_last.weekday()))
+    grid_days = []
+    d = grid_start
+    while d <= grid_end:
+        grid_days.append(d)
+        d += timedelta(days=1)
+    weeks = [grid_days[i:i+7] for i in range(0, len(grid_days), 7)]
+    entry_by_date = {e['day']: e for e in entries}
+
+    return render(request, 'attendance/student_history.html', {
+        'student': student,
+        'schoolyear': sy,
+        'enrollment': enrollment,
+        'year': year,
+        'month': month,
+        'days': days,
+        'entries': entries,
+        'counts': counts,
+        'nsd_dates': non_school_days,
+        'weeks': weeks,
+        'entry_by_date': entry_by_date,
+        'grid_start': grid_start,
+        'grid_end': grid_end,
+    })
+
+@login_required
 def schoolyear_list(request):
-    if not (request.user.is_staff or request.user.is_superuser):
+    if not has_feature(request.user, 'manage_schoolyears'):
         messages.warning(request, 'You are not allowed to view School Years.')
         return redirect('attendance:dashboard')
     sys = SchoolYear.objects.all()
@@ -444,7 +546,7 @@ def schoolyear_list(request):
 
 @login_required
 def schoolyear_create(request):
-    if not (request.user.is_staff or request.user.is_superuser):
+    if not has_feature(request.user, 'manage_schoolyears'):
         messages.warning(request, 'You are not allowed to create School Years.')
         return redirect('attendance:dashboard')
     if request.method == 'POST':
@@ -462,7 +564,7 @@ def schoolyear_create(request):
 
 @login_required
 def schoolyear_edit(request, pk: int):
-    if not (request.user.is_staff or request.user.is_superuser):
+    if not has_feature(request.user, 'manage_schoolyears'):
         messages.warning(request, 'You are not allowed to edit School Years.')
         return redirect('attendance:dashboard')
     sy = get_object_or_404(SchoolYear, pk=pk)
@@ -481,7 +583,7 @@ def schoolyear_edit(request, pk: int):
 
 @login_required
 def enroll_students(request, schoolyear_id: int):
-    if not (request.user.is_staff or request.user.is_superuser):
+    if not has_feature(request.user, 'enroll_students'):
         messages.warning(request, 'You are not allowed to manage enrollment.')
         return redirect('attendance:dashboard')
     sy = get_object_or_404(SchoolYear, pk=schoolyear_id)
@@ -508,6 +610,9 @@ def enroll_students(request, schoolyear_id: int):
 
 @login_required
 def take_attendance(request, schoolyear_id: int):
+    if not has_feature(request.user, 'take_attendance'):
+        messages.warning(request, 'You are not allowed to take attendance.')
+        return redirect('attendance:dashboard')
     sy = get_object_or_404(SchoolYear, pk=schoolyear_id)
     target_date_str = request.GET.get('date') or request.POST.get('date')
     if target_date_str:
@@ -517,9 +622,14 @@ def take_attendance(request, schoolyear_id: int):
         target_date = date.today()
 
     enroll_qs = Enrollment.objects.filter(school_year=sy, active=True).select_related('student', 'section')
-    # Restrict to adviser's section for non-staff
+    # Restrict to allowed sections for non-staff: adviser or officer access
     if not (request.user.is_staff or request.user.is_superuser):
-        enroll_qs = enroll_qs.filter(section__adviser=request.user)
+        officer_section_ids = list(
+            SectionAccess.objects.filter(user=request.user, section__school_year=sy).values_list('section_id', flat=True)
+        )
+        enroll_qs = enroll_qs.filter(
+            Q(section__adviser=request.user) | Q(section_id__in=officer_section_ids)
+        )
         if not enroll_qs.exists():
             messages.error(request, 'No assigned section or no enrolled students for you in this school year.')
             return redirect('attendance:schoolyear_list')
@@ -543,6 +653,7 @@ def take_attendance(request, schoolyear_id: int):
             remarks = (am_rec.remarks if am_rec else (pm_rec.remarks if pm_rec else ''))
             initial.append({
                 'enrollment_id': e.id,
+                'student_id': student.id,
                 'student_name': f"{student.last_name}, {student.first_name}",
                 'guardian_phone': getattr(student, 'guardian_phone', ''),
                 'guardian_name': getattr(student, 'guardian_name', ''),
@@ -560,6 +671,7 @@ def take_attendance(request, schoolyear_id: int):
             student = e.student
             item = {
                 'enrollment_id': e.id,
+                'student_id': student.id,
                 'student_name': f"{student.last_name}, {student.first_name}",
                 'guardian_phone': getattr(student, 'guardian_phone', ''),
                 'statuses': {},
@@ -694,7 +806,7 @@ def take_attendance(request, schoolyear_id: int):
 
 @login_required
 def manage_periods(request, schoolyear_id: int):
-    if not (request.user.is_staff or request.user.is_superuser):
+    if not has_feature(request.user, 'manage_periods'):
         messages.warning(request, 'You are not allowed to manage periods.')
         return redirect('attendance:dashboard')
     sy = get_object_or_404(SchoolYear, pk=schoolyear_id)
@@ -714,7 +826,7 @@ def manage_periods(request, schoolyear_id: int):
 
 @login_required
 def edit_period(request, schoolyear_id: int, pk: int):
-    if not (request.user.is_staff or request.user.is_superuser):
+    if not has_feature(request.user, 'manage_periods'):
         messages.warning(request, 'You are not allowed to edit periods.')
         return redirect('attendance:dashboard')
     sy = get_object_or_404(SchoolYear, pk=schoolyear_id)
@@ -749,7 +861,95 @@ def notifications_mark_all_read(request):
 
 
 @login_required
+def access_users(request):
+    # Only admins/advisers (manage_schoolyears) can manage access; superuser ok
+    if not (has_feature(request.user, 'manage_schoolyears') or request.user.is_superuser):
+        messages.warning(request, 'You are not allowed to manage access.')
+        return redirect('attendance:dashboard')
+    User = get_user_model()
+    q = (request.GET.get('q') or '').strip()
+    users = list(User.objects.all().order_by('username'))
+    if q:
+        ql = q.lower()
+        users = [u for u in users if (ql in (u.username or '').lower() or ql in (u.first_name or '').lower() or ql in (u.last_name or '').lower())]
+    # Build counts
+    from .models import FeatureAccess
+    sec_counts = {row['user']: row['c'] for row in SectionAccess.objects.values('user').annotate(c=Count('id'))}
+    feat_allow = {}
+    feat_deny = {}
+    for row in FeatureAccess.objects.values('user', 'allow').annotate(c=Count('id')):
+        if row['allow']:
+            feat_allow[row['user']] = row['c']
+        else:
+            feat_deny[row['user']] = row['c']
+    items = [{
+        'user': u,
+        'sec_count': sec_counts.get(u.id, 0),
+        'feat_allow': feat_allow.get(u.id, 0),
+        'feat_deny': feat_deny.get(u.id, 0),
+    } for u in users]
+    return render(request, 'attendance/access_users.html', {'items': items, 'q': q})
+
+
+@login_required
+def access_edit(request, user_id: int):
+    if not (has_feature(request.user, 'manage_schoolyears') or request.user.is_superuser):
+        messages.warning(request, 'You are not allowed to manage access.')
+        return redirect('attendance:dashboard')
+    User = get_user_model()
+    u = get_object_or_404(User, pk=user_id)
+    # Sections by SY, features from permissions
+    sections = Section.objects.select_related('school_year').order_by('school_year__start_date', 'name')
+    from .permissions import FEATURES
+    feat_list = sorted(list(FEATURES))
+
+    current_sections = set(SectionAccess.objects.filter(user=u).values_list('section_id', flat=True))
+    from .models import FeatureAccess
+    current_allow = set(FeatureAccess.objects.filter(user=u, allow=True).values_list('feature', flat=True))
+    current_deny = set(FeatureAccess.objects.filter(user=u, allow=False).values_list('feature', flat=True))
+
+    if request.method == 'POST':
+        sel_sections = set(int(x) for x in request.POST.getlist('section_ids'))
+        allow_feats = set(request.POST.getlist('feat_allow'))
+        # Unchecked means deny: compute deny as all - allow
+        deny_feats = set(feat_list) - allow_feats
+        # Update sections
+        to_add = sel_sections - current_sections
+        to_del = current_sections - sel_sections
+        for sid in to_add:
+            try:
+                SectionAccess.objects.create(user=u, section_id=sid)
+            except Exception:
+                pass
+        if to_del:
+            SectionAccess.objects.filter(user=u, section_id__in=list(to_del)).delete()
+        # Update features overrides
+        from .models import FeatureAccess
+        target = set(feat_list)
+        # Delete any override not present anymore (cleanup)
+        FeatureAccess.objects.filter(user=u).exclude(feature__in=list(target)).delete()
+        # Apply deny first, then allow overrides so allow wins
+        for feat in deny_feats:
+            FeatureAccess.objects.update_or_create(user=u, feature=feat, defaults={'allow': False})
+        for feat in allow_feats:
+            FeatureAccess.objects.update_or_create(user=u, feature=feat, defaults={'allow': True})
+        messages.success(request, 'Access updated.')
+        return redirect('attendance:access_edit', user_id=u.id)
+
+    return render(request, 'attendance/access_edit.html', {
+        'the_user': u,
+        'sections': sections,
+        'current_sections': current_sections,
+        'feat_list': feat_list,
+        'current_allow': current_allow,
+        'current_deny': current_deny,
+    })
+
+@login_required
 def bulk_assign_section(request, schoolyear_id: int):
+    if not has_feature(request.user, 'assign_section'):
+        messages.warning(request, 'You are not allowed to assign sections.')
+        return redirect('attendance:dashboard')
     sy = get_object_or_404(SchoolYear, pk=schoolyear_id)
     # Sections available to this user in this SY
     if request.user.is_staff or request.user.is_superuser:
@@ -788,6 +988,9 @@ def bulk_assign_section(request, schoolyear_id: int):
 
 @login_required
 def report_form(request):
+    if not has_feature(request.user, 'view_reports'):
+        messages.warning(request, 'You are not allowed to view reports.')
+        return redirect('attendance:dashboard')
     sys = SchoolYear.objects.all()
     today = date.today()
 
@@ -823,6 +1026,12 @@ def report_form(request):
         year_options = [today.year - 1, today.year, today.year + 1]
 
     month_options = [(i, _cal.month_name[i]) for i in range(1, 13)]
+    # Optional section filter for admins (staff/superuser)
+    sel_section_id = request.GET.get('section_id')
+    try:
+        sel_section_id = int(sel_section_id) if sel_section_id not in (None, '', 'all') else None
+    except (TypeError, ValueError):
+        sel_section_id = None
 
     # Build preview data (days, rows) with the same logic as report_preview
     days = []
@@ -842,6 +1051,9 @@ def report_form(request):
                 enroll_qs = Enrollment.objects.filter(school_year=sel_sy, active=True).select_related('student', 'section')
                 if not (request.user.is_staff or request.user.is_superuser):
                     enroll_qs = enroll_qs.filter(section__adviser=request.user)
+                else:
+                    if sel_section_id:
+                        enroll_qs = enroll_qs.filter(section_id=sel_section_id)
                 enrollments = list(enroll_qs)
 
                 if enrollments:
@@ -893,7 +1105,10 @@ def report_form(request):
                         }
                         (rows_m if s.sex == 'M' else rows_f).append(row)
                     # Compute monthly summary for preview (cached)
-                    scope = 'all' if (request.user.is_staff or request.user.is_superuser) else f'user:{request.user.id}'
+                    if (request.user.is_staff or request.user.is_superuser):
+                        scope = f"section:{sel_section_id or 'all'}"
+                    else:
+                        scope = f'user:{request.user.id}'
                     cache_key = f"sf2:{sel_sy.id}:{sel_year}:{sel_month}:{scope}"
                     summary = cache.get(cache_key)
                     if summary is None:
@@ -916,8 +1131,10 @@ def report_form(request):
         'selected_sy_id': sel_sy.id if sel_sy else None,
         'selected_year': sel_year,
         'selected_month': sel_month,
+        'selected_section_id': sel_section_id,
         'year_options': year_options,
         'month_options': month_options,
+        'sections': list(Section.objects.filter(school_year=sel_sy)) if sel_sy else [],
         'days': days,
         'rows': rows_m + rows_f if sel_sy and enrollments else rows,
         'rows_m': locals().get('rows_m', []),
@@ -934,6 +1151,9 @@ def report_form(request):
 
 @login_required
 def export_monthly_report(request):
+    if not has_feature(request.user, 'view_reports'):
+        messages.warning(request, 'You are not allowed to export reports.')
+        return redirect('attendance:dashboard')
     try:
         import openpyxl
         from openpyxl.styles import Alignment, Font, PatternFill
@@ -947,6 +1167,11 @@ def export_monthly_report(request):
     schoolyear_id = int(request.GET.get('schoolyear_id'))
     year = int(request.GET.get('year'))
     month = int(request.GET.get('month'))
+    sel_section_id = request.GET.get('section_id')
+    try:
+        sel_section_id = int(sel_section_id) if sel_section_id not in (None, '', 'all') else None
+    except (TypeError, ValueError):
+        sel_section_id = None
 
     sy = get_object_or_404(SchoolYear, pk=schoolyear_id)
 
@@ -982,6 +1207,9 @@ def export_monthly_report(request):
         if not enroll_qs.exists():
             messages.error(request, 'You have no section or students for this school year.')
             return redirect('attendance:report_form')
+    else:
+        if sel_section_id:
+            enroll_qs = enroll_qs.filter(section_id=sel_section_id)
     enrollments = list(enroll_qs)
 
     # Preload all records in this month for performance
@@ -1101,9 +1329,17 @@ def export_monthly_report(request):
 
 @login_required
 def report_preview(request):
+    if not has_feature(request.user, 'view_reports'):
+        messages.warning(request, 'You are not allowed to view reports.')
+        return redirect('attendance:dashboard')
     schoolyear_id = int(request.GET.get('schoolyear_id'))
     year = int(request.GET.get('year'))
     month = int(request.GET.get('month'))
+    sel_section_id = request.GET.get('section_id')
+    try:
+        sel_section_id = int(sel_section_id) if sel_section_id not in (None, '', 'all') else None
+    except (TypeError, ValueError):
+        sel_section_id = None
 
     sy = get_object_or_404(SchoolYear, pk=schoolyear_id)
 
@@ -1123,6 +1359,9 @@ def report_preview(request):
         if not enroll_qs.exists():
             messages.error(request, 'You have no section or students for this school year.')
             return redirect('attendance:report_form')
+    else:
+        if sel_section_id:
+            enroll_qs = enroll_qs.filter(section_id=sel_section_id)
     enrollments = list(enroll_qs)
 
     # Use session-based attendance (AM/PM) like export and report_form
@@ -1177,7 +1416,10 @@ def report_preview(request):
         (rows_m if s.sex == 'M' else rows_f).append(row)
 
     # Compute SF2 summary for preview (cached)
-    scope = 'all' if (request.user.is_staff or request.user.is_superuser) else f'user:{request.user.id}'
+    if (request.user.is_staff or request.user.is_superuser):
+        scope = f"section:{sel_section_id or 'all'}"
+    else:
+        scope = f'user:{request.user.id}'
     cache_key = f"sf2:{sy.id}:{year}:{month}:{scope}"
     summary = cache.get(cache_key)
     if summary is None:
@@ -1188,6 +1430,7 @@ def report_preview(request):
         'schoolyear': sy,
         'year': year,
         'month': month,
+        'selected_section_id': sel_section_id,
         'days': days,
         'rows': rows_m + rows_f,
         'rows_m': rows_m,
@@ -1204,9 +1447,175 @@ def report_preview(request):
 
 
 @login_required
-def non_school_days_import(request):
+def report_day_delete(request, schoolyear_id: int, year: int, month: int, day: int):
+    if not has_feature(request.user, 'view_reports'):
+        messages.warning(request, 'You are not allowed to modify reports.')
+        return redirect('attendance:dashboard')
+    """Confirm and delete all attendance records for a specific day.
+    Staff users affect the whole school year; non-staff restricted to their section(s).
+    """
+    sy = get_object_or_404(SchoolYear, pk=schoolyear_id)
+    try:
+        target_date = date(year, month, day)
+    except Exception:
+        messages.error(request, 'Invalid date provided.')
+        return redirect('attendance:report_form')
+
+    # Date must be inside the school year window
+    if target_date < sy.start_date or target_date > sy.end_date:
+        messages.error(request, 'Selected day is outside the school year range.')
+        return redirect('attendance:report_form')
+
+    # Scope of enrollments
+    enroll_qs = Enrollment.objects.filter(school_year=sy, active=True)
     if not (request.user.is_staff or request.user.is_superuser):
-        messages.error(request, 'Only staff can import Non-School Days.')
+        enroll_qs = enroll_qs.filter(section__adviser=request.user)
+        if not enroll_qs.exists():
+            messages.error(request, 'You have no eligible students on this school year.')
+            return redirect('attendance:report_form')
+
+    # Counts to show in confirmation
+    sess_qs = AttendanceSessionRecord.objects.filter(enrollment__in=enroll_qs, date=target_date)
+    per_qs = AttendancePeriodRecord.objects.filter(enrollment__in=enroll_qs, date=target_date)
+    sess_count = sess_qs.count()
+    per_count = per_qs.count()
+
+    if request.method == 'POST':
+        deleted_sessions = sess_count
+        deleted_periods = per_count
+        # Perform deletions
+        per_qs.delete()
+        sess_qs.delete()
+
+        # Invalidate cached SF2 summaries for this month
+        try:
+            scope_keys = []
+            # all-scope for staff
+            scope_keys.append(f"sf2:{sy.id}:{year}:{month}:all")
+            # adviser scope(s)
+            adviser_ids = set(enroll_qs.values_list('section__adviser_id', flat=True))
+            adviser_ids.add(getattr(request.user, 'id', None))
+            for aid in adviser_ids:
+                if aid:
+                    scope_keys.append(f"sf2:{sy.id}:{year}:{month}:user:{aid}")
+            for k in scope_keys:
+                cache.delete(k)
+        except Exception:
+            pass
+
+        messages.success(
+            request,
+            f"Deleted {deleted_sessions} session and {deleted_periods} period record(s) for {target_date}."
+        )
+        # Redirect back to report form with the same filters
+        return redirect(f"{reverse('attendance:report_form')}?schoolyear_id={sy.id}&year={year}&month={month}")
+
+    return render(request, 'attendance/day_confirm_delete.html', {
+        'schoolyear': sy,
+        'target_date': target_date,
+        'sess_count': sess_count,
+        'per_count': per_count,
+        'year': year,
+        'month': month,
+    })
+
+
+@login_required
+def report_day_mark_nsd(request, schoolyear_id: int, year: int, month: int, day: int):
+    if not has_feature(request.user, 'manage_reports'):
+        messages.error(request, 'Only staff can mark Non-School Days.')
+        return redirect('attendance:report_form')
+    sy = get_object_or_404(SchoolYear, pk=schoolyear_id)
+    try:
+        target_date = date(year, month, day)
+    except Exception:
+        messages.error(request, 'Invalid date provided.')
+        return redirect('attendance:report_form')
+    if target_date < sy.start_date or target_date > sy.end_date:
+        messages.error(request, 'Selected day is outside the school year range.')
+        return redirect('attendance:report_form')
+
+    existing = NonSchoolDay.objects.filter(school_year=sy, date=target_date).first()
+    if request.method == 'POST':
+        kind = request.POST.get('kind') or 'HOL'
+        title = (request.POST.get('title') or '').strip() or ('Holiday' if kind == 'HOL' else 'Class Suspension')
+        notes = (request.POST.get('notes') or '').strip()
+        NonSchoolDay.objects.update_or_create(
+            school_year=sy, date=target_date,
+            defaults={'kind': kind, 'title': title, 'notes': notes},
+        )
+        # Invalidate SF2 cache for month
+        try:
+            scope_keys = [f"sf2:{sy.id}:{year}:{month}:all"]
+            # Include all adviser scopes (best-effort)
+            adviser_ids = set(Enrollment.objects.filter(school_year=sy).values_list('section__adviser_id', flat=True))
+            for aid in adviser_ids:
+                if aid:
+                    scope_keys.append(f"sf2:{sy.id}:{year}:{month}:user:{aid}")
+            for k in scope_keys:
+                cache.delete(k)
+        except Exception:
+            pass
+        messages.success(request, f'Marked {target_date} as a Non-School Day.')
+        return redirect(f"{reverse('attendance:report_form')}?schoolyear_id={sy.id}&year={year}&month={month}")
+
+    return render(request, 'attendance/nsd_mark_form.html', {
+        'schoolyear': sy,
+        'target_date': target_date,
+        'year': year,
+        'month': month,
+        'existing': existing,
+    })
+
+
+@login_required
+def report_day_unmark_nsd(request, schoolyear_id: int, year: int, month: int, day: int):
+    if not has_feature(request.user, 'manage_reports'):
+        messages.error(request, 'Only staff can unmark Non-School Days.')
+        return redirect('attendance:report_form')
+    sy = get_object_or_404(SchoolYear, pk=schoolyear_id)
+    try:
+        target_date = date(year, month, day)
+    except Exception:
+        messages.error(request, 'Invalid date provided.')
+        return redirect('attendance:report_form')
+    if target_date < sy.start_date or target_date > sy.end_date:
+        messages.error(request, 'Selected day is outside the school year range.')
+        return redirect('attendance:report_form')
+
+    obj = NonSchoolDay.objects.filter(school_year=sy, date=target_date).first()
+    if not obj:
+        messages.info(request, 'This day is not marked as a Non-School Day.')
+        return redirect(f"{reverse('attendance:report_form')}?schoolyear_id={sy.id}&year={year}&month={month}")
+
+    if request.method == 'POST':
+        obj.delete()
+        # Invalidate SF2 cache for month
+        try:
+            scope_keys = [f"sf2:{sy.id}:{year}:{month}:all"]
+            adviser_ids = set(Enrollment.objects.filter(school_year=sy).values_list('section__adviser_id', flat=True))
+            for aid in adviser_ids:
+                if aid:
+                    scope_keys.append(f"sf2:{sy.id}:{year}:{month}:user:{aid}")
+            for k in scope_keys:
+                cache.delete(k)
+        except Exception:
+            pass
+        messages.success(request, f'Unmarked {target_date} as a Non-School Day.')
+        return redirect(f"{reverse('attendance:report_form')}?schoolyear_id={sy.id}&year={year}&month={month}")
+
+    return render(request, 'attendance/nsd_unmark_confirm.html', {
+        'schoolyear': sy,
+        'target_date': target_date,
+        'year': year,
+        'month': month,
+        'obj': obj,
+    })
+
+@login_required
+def non_school_days_import(request):
+    if not has_feature(request.user, 'manage_reports'):
+        messages.error(request, 'You are not allowed to import Non-School Days.')
         return redirect('attendance:report_form')
 
     sys = SchoolYear.objects.all()

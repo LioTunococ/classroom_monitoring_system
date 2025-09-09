@@ -8,6 +8,7 @@ urlpatterns = [
     path('students/', views.student_list, name='student_list'),
     path('students/new/', views.student_create, name='student_create'),
     path('students/<int:pk>/edit/', views.student_edit, name='student_edit'),
+    path('students/<int:pk>/history/', views.student_history, name='student_history'),
     path('students/<int:pk>/delete/', views.student_delete, name='student_delete'),
     path('students/<int:pk>/archive/', views.student_archive, name='student_archive'),
     path('students/<int:pk>/restore/', views.student_restore, name='student_restore'),
@@ -22,8 +23,14 @@ urlpatterns = [
     path('reports/monthly/', views.report_form, name='report_form'),
     path('reports/monthly/export/', views.export_monthly_report, name='export_monthly_report'),
     path('reports/monthly/preview/', views.report_preview, name='report_preview'),
+    path('reports/day/<int:schoolyear_id>/<int:year>/<int:month>/<int:day>/nsd/mark/', views.report_day_mark_nsd, name='report_day_mark_nsd'),
+    path('reports/day/<int:schoolyear_id>/<int:year>/<int:month>/<int:day>/nsd/unmark/', views.report_day_unmark_nsd, name='report_day_unmark_nsd'),
+    path('reports/day/<int:schoolyear_id>/<int:year>/<int:month>/<int:day>/delete/', views.report_day_delete, name='report_day_delete'),
     path('non-school-days/import/', views.non_school_days_import, name='non_school_days_import'),
     path('notifications/', views.notifications, name='notifications'),
     path('notifications/mark-all-read/', views.notifications_mark_all_read, name='notifications_mark_all_read'),
+    # Access management (features + sections)
+    path('access/', views.access_users, name='access_users'),
+    path('access/<int:user_id>/', views.access_edit, name='access_edit'),
     # Server-side bulk SMS removed; phone-based SMS only
 ]

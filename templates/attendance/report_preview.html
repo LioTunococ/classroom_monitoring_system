@@ -2,24 +2,45 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center">
   <h1 class="h5">Monthly Report Preview - {{ schoolyear.name }} - {{ year }}-{{ month|stringformat:'02d' }}</h1>
-  <div>
+  <div class="d-flex gap-2">
     <a class="btn btn-outline-secondary" href="{% url 'attendance:report_form' %}">Back</a>
-    <a class="btn btn-success" href="{% url 'attendance:export_monthly_report' %}?schoolyear_id={{ schoolyear.id }}&year={{ year }}&month={{ month }}">Download Excel</a>
+    <a class="btn btn-success" href="{% url 'attendance:export_monthly_report' %}?schoolyear_id={{ schoolyear.id }}&year={{ year }}&month={{ month }}{% if request.user.is_staff or request.user.is_superuser %}&section_id={{ selected_section_id|default:'all' }}{% endif %}">Download Excel</a>
+    <button type="button" class="btn btn-outline-secondary" onclick="window.print()">Print</button>
   </div>
 </div>
 
 <div class="table-responsive mt-3">
-  <table class="table table-sm table-bordered align-middle text-center">
+  <style>
+    .sf2 thead th { position: sticky; top: 0; z-index: 5; background: var(--bs-body-bg); }
+    .sf2 .sticky-col { position: sticky; background: var(--bs-body-bg); z-index: 6; }
+    .sf2 .s-col-1 { left: 0; min-width: 7rem; }
+    .sf2 .s-col-2 { left: 7.25rem; min-width: 16rem; }
+    @media (max-width: 576px){ .sf2 .s-col-1 { min-width: 6rem; } .sf2 .s-col-2 { left: 6.25rem; min-width: 14rem; } }
+  </style>
+  <table class="table table-sm table-bordered align-middle text-center sf2">
     <thead class="table-light">
       <tr>
-        <th>LRN</th>
-        <th class="text-start">Learner's Name</th>
+        <th class="sticky-col s-col-1">LRN</th>
+        <th class="text-start sticky-col s-col-2">Learner's Name</th>
         <th>Sex</th>
         <th>Birthdate</th>
         {% for d in days %}
           <th class="{% if nsd_dates and d in nsd_dates %}table-secondary{% endif %}" title="{{ d|date:'l' }}">
             {{ d|date:'j' }}
             <div class="small text-muted">{{ d|date:'D' }}</div>
+            <div class="mt-1">
+              <a class="link-secondary small" href="{% url 'attendance:take_attendance' schoolyear.id %}?date={{ d|date:'Y-m-d' }}">Edit</a>
+              <span class="text-muted">·</span>
+              <a class="link-danger small" href="{% url 'attendance:report_day_delete' schoolyear.id d.year d.month d.day %}">Delete</a>
+              {% if caps.manage_reports %}
+                <span class="text-muted">·</span>
+                {% if nsd_dates and d in nsd_dates %}
+                  <a class="link-warning small" href="{% url 'attendance:report_day_unmark_nsd' schoolyear.id d.year d.month d.day %}">Unmark NSD</a>
+                {% else %}
+                  <a class="link-warning small" href="{% url 'attendance:report_day_mark_nsd' schoolyear.id d.year d.month d.day %}">Mark NSD</a>
+                {% endif %}
+              {% endif %}
+            </div>
           </th>
         {% endfor %}
         <th>P</th>
@@ -33,8 +54,8 @@
       <tr><th colspan="{{ total_cols }}" class="table-light text-start">Male</th></tr>
       {% for r in rows_m %}
         <tr>
-          <td>{{ r.lrn }}</td>
-          <td class="text-start">{{ r.name }}</td>
+          <td class="sticky-col s-col-1">{{ r.lrn }}</td>
+          <td class="text-start sticky-col s-col-2">{{ r.name }}</td>
           <td>{{ r.sex }}</td>
           <td>{{ r.birthdate }}</td>
           {% for p in r.day_pairs %}
@@ -57,8 +78,8 @@
       <tr><th colspan="{{ total_cols }}" class="table-light text-start">Female</th></tr>
       {% for r in rows_f %}
         <tr>
-          <td>{{ r.lrn }}</td>
-          <td class="text-start">{{ r.name }}</td>
+          <td class="sticky-col s-col-1">{{ r.lrn }}</td>
+          <td class="text-start sticky-col s-col-2">{{ r.name }}</td>
           <td>{{ r.sex }}</td>
           <td>{{ r.birthdate }}</td>
           {% for p in r.day_pairs %}

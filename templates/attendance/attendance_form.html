@@ -12,10 +12,10 @@
     <input id="date-input" type="date" class="form-control" name="date" value="{{ target_date|date:'Y-m-d' }}">
     <button class="btn btn-outline-secondary" type="submit">Go</button>
   </form>
-  <div class="text-muted small w-100 mt-1">Viewing: <strong>{{ target_date|date:'F d, Y' }}</strong> ({{ target_date|date:'l' }})</div>
+  <div class="viewing-date w-100 mt-1"><span class="me-1">📅</span><span class="date-main">{{ target_date|date:'F d, Y' }}</span> <span class="dow">({{ target_date|date:'l' }})</span></div>
   </div>
 
-<div class="mt-3">
+<div class="mt-3 sticky-filter-2">
   <input id="filter-input" type="search" class="form-control" placeholder="Search learner by name..." autocomplete="off">
   <div class="form-text">Type to filter the list below.</div>
   </div>
@@ -25,21 +25,12 @@
   <input type="hidden" name="date" value="{{ target_date|date:'Y-m-d' }}">
 
   <div class="d-flex flex-wrap gap-2 mb-2 align-items-center">
-    <button type="button" class="btn btn-sm btn-outline-success" id="btn-all-present">Mark ALL Present</button>
-    <button type="button" class="btn btn-sm btn-outline-success" id="btn-am-present">AM Present</button>
-    <button type="button" class="btn btn-sm btn-outline-success" id="btn-pm-present">PM Present</button>
     <span class="badge rounded-pill text-bg-secondary" id="marked-counter">Marked 0/0</span>
     <div class="form-check ms-auto">
-      <input class="form-check-input" type="checkbox" id="chk-only-unmarked">
-      <label class="form-check-label" for="chk-only-unmarked">Show only unmarked</label>
-    </div>
-    <div class="form-check">
       <input class="form-check-input" type="checkbox" id="chk-only-ale">
-      <label class="form-check-label" for="chk-only-ale">Show only Absent/Late/Excused</label>
+      <label class="form-check-label" for="chk-only-ale">Only Absent/Late/Excused</label>
     </div>
-    <button type="button" class="btn btn-sm btn-outline-secondary" id="btn-next-ale">Jump to next A/L/E</button>
   </div>
-
   {% if periods %}
     <div class="alert alert-info">Per-period attendance enabled. Default is Present for all periods. Mark Late to capture time-in.</div>
     {% for e in enrollments_period %}
@@ -47,21 +38,11 @@
         <div class="card-body">
           <div class="mb-2 d-flex justify-content-between align-items-center gap-2 flex-wrap">
             <div class="student-name">{{ e.student_name }}</div>
-            <div class="d-flex gap-1 flex-wrap">
-              {% if e.guardian_phone %}
-                <a href="#" class="btn btn-sm btn-outline-secondary js-sms"
-                   data-phone="{{ e.guardian_phone|phone_e164 }}"
-                   title="Compose SMS to parent">SMS</a>
-              {% endif %}
-            </div>
-            <div class="d-flex gap-1 ms-auto">
-              <button type="button" class="btn btn-sm btn-outline-success js-row-all-p" title="Mark all periods Present">All P</button>
-              <button type="button" class="btn btn-sm btn-outline-secondary js-row-clear" title="Clear time-in and set Present">Clear</button>
-            </div>
+            <div class="d-flex gap-1 flex-wrap"></div>
           </div>
           <div class="periods-wrap">
             {% for p in periods %}
-            <div class="period-chip">
+            <div class="period-chip {% if p.half == 'PM' %}pm{% endif %}">
               <div class="title text-center">{{ p.name }}</div>
               <div class="sub text-center">{{ p.half }}</div>
               <div class="chip-group" role="group" aria-label="{{ p.name }}">
@@ -256,9 +237,30 @@
     }
     document.getElementById('btn-prev-day')?.addEventListener('click', ()=> submitWithNav('prev'));
     document.getElementById('btn-next-day')?.addEventListener('click', ()=> submitWithNav('next'));
+    // Warn if any period or AM/PM is unmarked before submit
+    function hasUnmarked(){
+      const cards = Array.from(document.querySelectorAll('.student-card'));
+      for (const card of cards){
+        const per = card.querySelectorAll('input[type=radio][name^="p_"]');
+        if (per.length){
+          const names = new Set(Array.from(per).map(r => r.name));
+          const checked = new Set(Array.from(card.querySelectorAll('input[type=radio][name^="p_"]:checked')).map(r => r.name));
+          if (checked.size !== names.size) return true;
+        } else {
+          const am = card.querySelector('input[type=radio][name$="status_am"]:checked');
+          const pm = card.querySelector('input[type=radio][name$="status_pm"]:checked');
+          if (!am || !pm) return true;
+        }
+      }
+      return false;
+    }
     let submitting = false;
     if (form) {
-      form.addEventListener('submit', function(){
+      form.addEventListener('submit', function(e){
+        if (hasUnmarked()){
+          const ok = window.confirm('Some learners have unmarked periods. Continue saving?');
+          if (!ok){ e.preventDefault(); return; }
+        }
         try {
           sessionStorage.setItem('attend_scroll', String(window.scrollY || window.pageYOffset || 0));
           sessionStorage.setItem('attend_saved', '1');
@@ -418,24 +420,7 @@
       }
     }, { passive: true });
 
-    // Quick jump to next A/L/E row
-    (function(){
-      const btn = document.getElementById('btn-next-ale'); if (!btn) return;
-      function hasAnyALE(card){
-        const sel = card.querySelectorAll('input[type=radio][name^="p_"]:checked');
-        for (const r of sel){ if (r.value !== 'P') return true; }
-        const am = card.querySelector('input[type=radio][name$="status_am"]:checked');
-        const pm = card.querySelector('input[type=radio][name$="status_pm"]:checked');
-        return (am && am.value !== 'P') || (pm && pm.value !== 'P');
-      }
-      btn.addEventListener('click', function(){
-        const cards = Array.from(document.querySelectorAll('.student-card'));
-        const y = window.scrollY || 0;
-        const next = cards.find(c => (c.getBoundingClientRect().top + y) > y + 8 && hasAnyALE(c));
-        if (next){ next.scrollIntoView({behavior:'smooth', block:'start'}); }
-        else if (window.showToast){ window.showToast('No next A/L/E row', 'info'); }
-      });
-    })();
+    // Removed jump-to-next A/L/E (redundant with filter)
   })();
 </script>
 <script>

@@ -1,4 +1,6 @@
 from django.contrib import admin
+from django.utils.html import format_html
+from django.urls import reverse
 from .models import (
     Student,
     SchoolYear,
@@ -7,6 +9,8 @@ from .models import (
     AttendanceSessionRecord,
     NonSchoolDay,
     Notification,
+    SectionAccess,
+    FeatureAccess,
 )
 
 
@@ -21,10 +25,18 @@ class SchoolYearAdmin(admin.ModelAdmin):
 class StudentAdmin(admin.ModelAdmin):
     list_display = (
         "last_name", "first_name", "sex", "birthdate", "lrn",
-        "guardian_name", "guardian_phone", "is_active",
+        "guardian_name", "guardian_phone", "is_active", "history_button",
     )
     list_filter = ("sex", "is_active")
     search_fields = ("last_name", "first_name", "lrn", "guardian_name", "guardian_phone")
+
+    def history_button(self, obj):
+        try:
+            url = reverse('attendance:student_history', args=[obj.id])
+            return format_html('<a class="button" href="{}" target="_blank">History</a>', url)
+        except Exception:
+            return ''
+    history_button.short_description = 'History'
 
 @admin.register(Section)
 class SectionAdmin(admin.ModelAdmin):
@@ -65,3 +77,17 @@ class NotificationAdmin(admin.ModelAdmin):
     list_filter = ("is_read", "user")
     search_fields = ("message", "user__username", "user__first_name", "user__last_name")
     date_hierarchy = "created"
+
+
+@admin.register(SectionAccess)
+class SectionAccessAdmin(admin.ModelAdmin):
+    list_display = ("user", "section", "role")
+    list_filter = ("role", "section__school_year")
+    search_fields = ("user__username", "user__first_name", "user__last_name", "section__name")
+
+
+@admin.register(FeatureAccess)
+class FeatureAccessAdmin(admin.ModelAdmin):
+    list_display = ("user", "feature", "allow")
+    list_filter = ("feature", "allow")
+    search_fields = ("user__username", "user__first_name", "user__last_name")

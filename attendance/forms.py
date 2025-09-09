@@ -67,6 +67,7 @@ class SchoolYearForm(forms.ModelForm):
 
 class SingleAttendanceForm(forms.Form):
     enrollment_id = forms.IntegerField(widget=forms.HiddenInput())
+    student_id = forms.IntegerField(widget=forms.HiddenInput(), required=False)
     student_name = forms.CharField(disabled=True, required=False)
     status_am = forms.ChoiceField(label='AM', choices=STATUS_CHOICES, widget=forms.RadioSelect)
     status_pm = forms.ChoiceField(label='PM', choices=STATUS_CHOICES, widget=forms.RadioSelect)

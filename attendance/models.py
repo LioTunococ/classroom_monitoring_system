@@ -172,3 +172,52 @@ class AttendancePeriodRecord(models.Model):
 
     def __str__(self):
         return f"{self.enrollment} - {self.date} {self.period.name}: {self.get_status_display()}"
+
+
+class SectionAccess(models.Model):
+    """Grants a user access to a specific Section (e.g., Student Officer)."""
+    ROLE_CHOICES = (
+        ("OFFICER", "Student Officer"),
+        ("ASSISTANT", "Assistant"),
+    )
+    user = models.ForeignKey(dj_settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="section_access")
+    section = models.ForeignKey(Section, on_delete=models.CASCADE, related_name="user_access")
+    role = models.CharField(max_length=16, choices=ROLE_CHOICES, default="OFFICER")
+
+    class Meta:
+        unique_together = ("user", "section")
+        indexes = [
+            models.Index(fields=["user", "section"], name="idx_secaccess_user_section"),
+        ]
+
+    def __str__(self):
+        return f"{self.user} -> {self.section} ({self.role})"
+
+
+class FeatureAccess(models.Model):
+    """Per-user feature overrides (allow or deny) to customize access without changing groups."""
+    FEATURE_CHOICES = (
+        ('dashboard', 'Dashboard'),
+        ('take_attendance', 'Take Attendance'),
+        ('view_reports', 'View Reports'),
+        ('manage_schoolyears', 'Manage School Years'),
+        ('enroll_students', 'Enroll Students'),
+        ('manage_periods', 'Manage Periods'),
+        ('assign_section', 'Assign Section'),
+        ('manage_students', 'Manage Students'),
+        ('view_student_history', 'View Student History'),
+        ('manage_reports', 'Manage Reports/NSDs'),
+    )
+    user = models.ForeignKey(dj_settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='feature_access')
+    feature = models.CharField(max_length=64, choices=FEATURE_CHOICES)
+    allow = models.BooleanField(default=True, help_text="Allow if checked, deny if unchecked")
+
+    class Meta:
+        unique_together = ("user", "feature")
+        indexes = [
+            models.Index(fields=["user", "feature"], name="idx_feataccess_user_feature"),
+        ]
+
+    def __str__(self):
+        state = 'allow' if self.allow else 'deny'
+        return f"{self.user} {state} {self.feature}"

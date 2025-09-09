@@ -2,7 +2,7 @@
 {% block content %}
 <h1 class="h4">Monthly Report (SF2)</h1>
 
-<form method="get" action="{% url 'attendance:report_form' %}" class="row g-3 mt-2">
+<form id="report-filter" method="get" action="{% url 'attendance:report_form' %}" class="row g-2 mt-2 sticky-filter align-items-end">
   <div class="col-md-4">
     <label class="form-label">School Year</label>
     <select class="form-select" name="schoolyear_id" required>
@@ -11,6 +11,17 @@
       {% endfor %}
     </select>
   </div>
+  {% if request.user.is_staff or request.user.is_superuser %}
+  <div class="col-md-4">
+    <label class="form-label">Section</label>
+    <select class="form-select" name="section_id">
+      <option value="all" {% if not selected_section_id %}selected{% endif %}>All Sections</option>
+      {% for s in sections %}
+        <option value="{{ s.id }}" {% if selected_section_id == s.id %}selected{% endif %}>{{ s.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
   <div class="col-md-3">
     <label class="form-label">Year</label>
     <select class="form-select" name="year" required>
@@ -27,8 +38,12 @@
       {% endfor %}
     </select>
   </div>
-  <div class="col-md-2 d-flex align-items-end gap-2">
-    <button class="btn btn-primary w-100" type="submit">Update</button>
+  <div class="col-md-2 d-flex align-items-end gap-2 flex-wrap">
+    <div class="btn-group w-100" role="group" aria-label="Quick month nav">
+      <button id="btn-prev-month" class="btn btn-outline-secondary" type="button">Prev</button>
+      <button id="btn-next-month" class="btn btn-outline-secondary" type="button">Next</button>
+    </div>
+    <button class="btn btn-primary w-100 mt-1 mt-md-0" type="submit">Update</button>
   </div>
   </form>
 
@@ -37,25 +52,62 @@
     {% if selected_sy %} {{ selected_sy.name }} - {{ selected_year }}-{{ selected_month|stringformat:'02d' }} {% else %} No School Year {% endif %}
   </h2>
   {% if selected_sy %}
-  <div>
+  <div class="d-flex gap-2">
     <a class="btn btn-outline-secondary" href="{% url 'attendance:report_form' %}">Refresh</a>
-    <a class="btn btn-success" href="{% url 'attendance:export_monthly_report' %}?schoolyear_id={{ selected_sy.id }}&year={{ selected_year }}&month={{ selected_month }}">Download Excel</a>
+    <a class="btn btn-success" href="{% url 'attendance:export_monthly_report' %}?schoolyear_id={{ selected_sy.id }}&year={{ selected_year }}&month={{ selected_month }}{% if request.user.is_staff or request.user.is_superuser %}&section_id={{ selected_section_id|default:'all' }}{% endif %}">Download Excel</a>
+    <button type="button" class="btn btn-outline-secondary" onclick="window.print()">Print</button>
   </div>
   {% endif %}
   </div>
 
+<style>
+  .sf2 thead th { position: sticky; top: 0; z-index: 5; background: var(--bs-body-bg); }
+  .sf2 .sticky-col { position: sticky; background: var(--bs-body-bg); z-index: 6; }
+  .sf2 .s-col-1 { left: 0; min-width: 7rem; }
+  .sf2 .s-col-2 { left: 7.25rem; min-width: 16rem; }
+  @media (max-width: 576px){ .sf2 .s-col-1 { min-width: 6rem; } .sf2 .s-col-2 { left: 6.25rem; min-width: 14rem; } }
+  .code-P{background:#198754;color:#fff}
+  .code-A{background:#dc3545;color:#fff}
+  .code-L{background:#ffc107;color:#212529}
+  .code-E{background:#0dcaf0;color:#042a2b}
+</style>
+
+<div class="d-flex align-items-center gap-2 small mt-2">
+  <span>Legend:</span>
+  <span class="badge code-P">P</span>
+  <span class="badge code-A">A</span>
+  <span class="badge code-L">L</span>
+  <span class="badge code-E">E</span>
+  <span class="text-muted">Non-school days are shaded</span>
+</div>
+
 <div class="table-responsive mt-3">
-  <table class="table table-sm table-bordered align-middle text-center">
+  <table class="table table-sm table-bordered align-middle text-center sf2">
     <thead class="table-light">
       <tr>
-        <th>LRN</th>
-        <th class="text-start">Learner's Name</th>
+        <th class="sticky-col s-col-1">LRN</th>
+        <th class="text-start sticky-col s-col-2">Learner's Name</th>
         <th>Sex</th>
         <th>Birthdate</th>
         {% for d in days %}
           <th class="{% if nsd_dates and d in nsd_dates %}table-secondary{% endif %}" title="{{ d|date:'l' }}">
             {{ d|date:'j' }}
             <div class="small text-muted">{{ d|date:'D' }}</div>
+            {% if selected_sy %}
+            <div class="mt-1">
+              <a class="link-secondary small" href="{% url 'attendance:take_attendance' selected_sy.id %}?date={{ d|date:'Y-m-d' }}">Edit</a>
+              <span class="text-muted">·</span>
+              <a class="link-danger small" href="{% url 'attendance:report_day_delete' selected_sy.id d.year d.month d.day %}">Delete</a>
+              {% if caps.manage_reports %}
+                <span class="text-muted">·</span>
+                {% if nsd_dates and d in nsd_dates %}
+                  <a class="link-warning small" href="{% url 'attendance:report_day_unmark_nsd' selected_sy.id d.year d.month d.day %}">Unmark NSD</a>
+                {% else %}
+                  <a class="link-warning small" href="{% url 'attendance:report_day_mark_nsd' selected_sy.id d.year d.month d.day %}">Mark NSD</a>
+                {% endif %}
+              {% endif %}
+            </div>
+            {% endif %}
           </th>
         {% endfor %}
         <th>P</th>
@@ -69,8 +121,8 @@
       <tr><th colspan="{{ total_cols }}" class="table-light text-start">Male</th></tr>
       {% for r in rows_m %}
         <tr>
-          <td>{{ r.lrn }}</td>
-          <td class="text-start">{{ r.name }}</td>
+          <td class="sticky-col s-col-1">{{ r.lrn }}</td>
+          <td class="text-start sticky-col s-col-2">{{ r.name }}</td>
           <td>{{ r.sex }}</td>
           <td>{{ r.birthdate }}</td>
           {% for p in r.day_pairs %}
@@ -93,8 +145,8 @@
       <tr><th colspan="{{ total_cols }}" class="table-light text-start">Female</th></tr>
       {% for r in rows_f %}
         <tr>
-          <td>{{ r.lrn }}</td>
-          <td class="text-start">{{ r.name }}</td>
+          <td class="sticky-col s-col-1">{{ r.lrn }}</td>
+          <td class="text-start sticky-col s-col-2">{{ r.name }}</td>
           <td>{{ r.sex }}</td>
           <td>{{ r.birthdate }}</td>
           {% for p in r.day_pairs %}

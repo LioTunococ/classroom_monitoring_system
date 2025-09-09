@@ -1,4 +1,5 @@
 from .models import SchoolYear, Notification
+from .permissions import caps_for
 
 
 def active_sy(request):
@@ -14,4 +15,9 @@ def active_sy(request):
             unread = Notification.objects.filter(user=request.user, is_read=False).count()
     except Exception:
         unread = 0
-    return {"active_sy": sy, "notif_unread": unread}
+    caps = {}
+    try:
+        caps = caps_for(request.user) if getattr(request, 'user', None) else {}
+    except Exception:
+        caps = {}
+    return {"active_sy": sy, "notif_unread": unread, "caps": caps}

@@ -1,0 +1,29 @@
+{% extends 'attendance/base.html' %}
+{% block content %}
+<h1 class="h5">Mark Non-School Day</h1>
+<p class="mb-2">School Year: <strong>{{ schoolyear.name }}</strong></p>
+<p class="mb-3">Date: <strong>{{ target_date|date:'F d, Y' }}</strong></p>
+
+<form method="post" class="row g-3">{% csrf_token %}
+  <div class="col-md-3">
+    <label class="form-label">Type</label>
+    <select name="kind" class="form-select">
+      <option value="HOL" {% if existing and existing.kind == 'HOL' %}selected{% endif %}>Holiday</option>
+      <option value="SUS" {% if existing and existing.kind == 'SUS' %}selected{% endif %}>Class Suspension</option>
+    </select>
+  </div>
+  <div class="col-md-6">
+    <label class="form-label">Title</label>
+    <input type="text" name="title" class="form-control" value="{% if existing %}{{ existing.title }}{% endif %}" placeholder="e.g., National Holiday" />
+  </div>
+  <div class="col-md-12">
+    <label class="form-label">Notes (optional)</label>
+    <input type="text" name="notes" class="form-control" value="{% if existing %}{{ existing.notes }}{% endif %}" />
+  </div>
+  <div class="col-12">
+    <button type="submit" class="btn btn-primary">Save</button>
+    <a href="{% url 'attendance:report_form' %}?schoolyear_id={{ schoolyear.id }}&year={{ year }}&month={{ month }}" class="btn btn-outline-secondary">Cancel</a>
+  </div>
+</form>
+{% endblock %}
+
